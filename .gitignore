@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data files (large audio datasets)
+ai-engine/data/
+ai-engine/temp_download/
+ai-engine/temp_tts/
+*.wav
+*.mp3
+*.flac
+*.tar.gz
+
+# Model weights (uncomment if you want to track them)
+# ai-engine/*.pth
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Hugging Face cache
+.cache/
+
+# Temporary files
+*.tmp
+*.temp

@@ -1,0 +1,9 @@
+torch
+torchaudio
+librosa
+numpy
+soundfile
+fastapi
+uvicorn
+datasets
+huggingface-hub
