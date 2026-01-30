@@ -12,7 +12,7 @@ from model import VoiceCNN
 
 # Constants
 MAX_LEN = 157  # Must match dataset.py
-MODEL_PATH = "voice_model.pth"
+MODEL_PATH = "models/voice_model.pth"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 

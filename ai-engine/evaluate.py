@@ -9,7 +9,7 @@ data = VoiceDataset("data/test")
 loader = DataLoader(data, batch_size=8)
 
 model = VoiceCNN().to(device)
-model.load_state_dict(torch.load("voice_model.pth"))
+model.load_state_dict(torch.load("models/voice_model.pth"))
 model.eval()
 
 correct = 0
@@ -26,4 +26,9 @@ with torch.no_grad():
         correct += (preds == y).sum().item()
         total += y.size(0)
 
-print("Accuracy:", correct / total)
+acc = correct / total
+print("Accuracy:", acc)
+with open("evaluation_results.txt", "w") as f:
+    f.write(f"Test Accuracy: {acc*100:.2f}%\n")
+    f.write(f"Correct: {correct}/{total}\n")
+

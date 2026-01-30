@@ -1,3 +1,4 @@
+
 # Python
 __pycache__/
 *.py[cod]
@@ -19,6 +20,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
 # Virtual environments
 venv/
@@ -45,8 +47,12 @@ ai-engine/temp_tts/
 *.flac
 *.tar.gz
 
-# Model weights (uncomment if you want to track them)
-# ai-engine/*.pth
+# Model weights and artifacts
+*.pth
+*.pt
+*.ckpt
+ai-engine/models/
+ai-engine/evaluation_results.txt
 
 # Logs
 *.log
@@ -62,6 +68,12 @@ Thumbs.db
 
 # Hugging Face cache
 .cache/
+
+# Testing and Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
 
 # Temporary files
 *.tmp

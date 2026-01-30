@@ -17,7 +17,7 @@ model = VoiceCNN().to(device)
 criterion = nn.BCELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
-EPOCHS = 20
+EPOCHS = 5
 
 for epoch in range(EPOCHS):
     model.train()
@@ -38,5 +38,5 @@ for epoch in range(EPOCHS):
 
     print(f"Epoch {epoch+1}/{EPOCHS} - Loss: {total_loss:.4f}")
 
-torch.save(model.state_dict(), "voice_model.pth")
-print("Model saved as voice_model.pth")
+torch.save(model.state_dict(), "models/voice_model.pth")
+print("Model saved as models/voice_model.pth")
