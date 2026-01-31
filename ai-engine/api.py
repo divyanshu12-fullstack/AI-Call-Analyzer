@@ -45,10 +45,12 @@ detector = VoiceDetector()
 
 class AudioRequest(BaseModel):
     """Request body containing base64-encoded audio or URL."""
-    audio: Optional[str] = None      # Base64-encoded MP3 or WAV
-    audio_url: Optional[str] = None  # URL to audio file
-    language: Optional[str] = None   # Optional language field from tester
-    audio_format: Optional[str] = None # Optional format field from tester
+    audio: Optional[str] = None      # Standard naming
+    audio_url: Optional[str] = None  # URL naming
+    audio_base64: Optional[str] = None # Alternate naming
+    audio_base64_format: Optional[str] = None # Possible exact-label match
+    language: Optional[str] = None   # Optional field from tester
+    audio_format: Optional[str] = None # Optional field from tester
 
 
 class DetectionResponse(BaseModel):
@@ -80,21 +82,25 @@ def detect_voice(request: AudioRequest, api_key: str = Depends(get_api_key)):
     Returns classification, confidence score, and technical explanation.
     """
     try:
+        # Consolidate audio input from possible field names
+        audio_data = request.audio or request.audio_base64 or request.audio_base64_format
+        audio_url = request.audio_url
+
         # Validate input
-        if not request.audio and not request.audio_url:
-            raise HTTPException(status_code=400, detail="Must provide either 'audio' or 'audio_url'")
+        if not audio_data and not audio_url:
+            raise HTTPException(status_code=400, detail="Must provide either 'audio' (base64) or 'audio_url'")
         
-        if request.audio and request.audio_url:
+        if audio_data and audio_url:
             raise HTTPException(status_code=400, detail="Provide only one of 'audio' or 'audio_url', not both")
         
         # Process request
-        if request.audio_url:
+        if audio_url:
             try:
-                result = detector.predict_from_url(request.audio_url)
+                result = detector.predict_from_url(audio_url)
             except ValueError as ve:
                 raise HTTPException(status_code=400, detail=str(ve))
         else:
-            result = detector.predict_from_base64(request.audio)
+            result = detector.predict_from_base64(audio_data)
             
         return DetectionResponse(**result)
         
