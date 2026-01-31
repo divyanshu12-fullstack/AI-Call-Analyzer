@@ -3,6 +3,7 @@ FastAPI server for AI Voice Detection.
 Exposes a POST /api/voice-detection endpoint that accepts base64-encoded audio.
 """
 from fastapi import FastAPI, HTTPException, Header, Security, Depends, Request
+from dotenv import load_dotenv
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
@@ -12,9 +13,12 @@ from typing import Optional
 import os
 from inference import VoiceDetector
 
+# Load environment variables from .env file
+load_dotenv()
+
 # Configuration
 API_KEY_NAME = "x-api-key"
-API_KEY = os.getenv("API_KEY", "default-key-change-me")
+API_KEY = os.getenv("API_KEY", "my-super-secret-key-123")
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 async def get_api_key(api_key_header: str = Security(api_key_header)):

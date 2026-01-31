@@ -10,3 +10,4 @@ huggingface-hub
 pandas
 pyarrow
 gtts
+python-dotenv

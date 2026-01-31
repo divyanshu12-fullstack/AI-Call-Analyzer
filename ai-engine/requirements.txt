@@ -5,5 +5,6 @@ soundfile
 fastapi
 uvicorn
 python-multipart
+python-dotenv
 # Removed heavyweight/unused packages that cause build errors on Render:
 # pandas, pyarrow, datasets, huggingface-hub, gtts

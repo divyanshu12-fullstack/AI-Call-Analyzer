@@ -8,7 +8,7 @@ import numpy as np
 import base64
 import tempfile
 import os
-from model import VoiceCNN
+from model import VoiceResNet
 
 # Constants
 MAX_LEN = 157  # Must match dataset.py
@@ -21,26 +21,80 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 class VoiceDetector:
     def __init__(self, model_path=MODEL_PATH):
-        self.model = VoiceCNN().to(DEVICE)
-        self.model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+        self.model = VoiceResNet().to(DEVICE)
+        self.model.load_state_dict(torch.load("models/voice_model_best.pth", map_location=DEVICE))
         self.model.eval()
         
-    def _audio_to_mel(self, audio_path):
-        """Convert audio file to normalized mel spectrogram."""
+    def _extract_features(self, audio_path):
+        """Extract all audio features and concatenate them."""
         audio, sr = librosa.load(audio_path, sr=16000)
-        
+
+        # Mel spectrogram
         mel = librosa.feature.melspectrogram(y=audio, sr=sr, n_mels=64)
         mel = librosa.power_to_db(mel)
         mel = (mel - mel.mean()) / (mel.std() + 1e-6)
-        
-        # Pad or trim to fixed length
-        if mel.shape[1] < MAX_LEN:
-            pad_width = MAX_LEN - mel.shape[1]
-            mel = np.pad(mel, ((0, 0), (0, pad_width)), mode='constant')
-        else:
-            mel = mel[:, :MAX_LEN]
-            
-        return mel
+
+        # MFCCs (13 coefficients + deltas)
+        mfcc = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13)
+        mfcc_delta = librosa.feature.delta(mfcc)
+        mfcc = np.concatenate([mfcc, mfcc_delta], axis=0)  # shape: (26, T)
+        mfcc = (mfcc - mfcc.mean()) / (mfcc.std() + 1e-6)
+
+        # Pitch (F0)
+        pitches, magnitudes = librosa.piptrack(y=audio, sr=sr)
+        pitch_track = pitches.max(axis=0)
+        pitch_track = np.expand_dims(pitch_track, axis=0)  # (1, T)
+        pitch_track = (pitch_track - pitch_track.mean()) / (pitch_track.std() + 1e-6)
+
+        # Spectral contrast
+        contrast = librosa.feature.spectral_contrast(y=audio, sr=sr)
+        contrast = (contrast - contrast.mean()) / (contrast.std() + 1e-6)
+
+        # Chroma
+        chroma = librosa.feature.chroma_stft(y=audio, sr=sr)
+        chroma = (chroma - chroma.mean()) / (chroma.std() + 1e-6)
+
+        # Zero-crossing rate
+        zcr = librosa.feature.zero_crossing_rate(y=audio)
+        zcr = (zcr - zcr.mean()) / (zcr.std() + 1e-6)
+
+        # Spectral centroid and bandwidth
+        centroid = librosa.feature.spectral_centroid(y=audio, sr=sr)
+        bandwidth = librosa.feature.spectral_bandwidth(y=audio, sr=sr)
+        centroid = (centroid - centroid.mean()) / (centroid.std() + 1e-6)
+        bandwidth = (bandwidth - bandwidth.mean()) / (bandwidth.std() + 1e-6)
+
+        # Pad or trim all features to MAX_LEN frames
+        def pad_or_trim(feat, max_len=MAX_LEN):
+            if feat.shape[1] < max_len:
+                pad_width = max_len - feat.shape[1]
+                feat = np.pad(feat, ((0, 0), (0, pad_width)), mode='constant')
+            else:
+                feat = feat[:, :max_len]
+            return feat
+
+        mel = pad_or_trim(mel)
+        mfcc = pad_or_trim(mfcc)
+        pitch_track = pad_or_trim(pitch_track)
+        contrast = pad_or_trim(contrast)
+        chroma = pad_or_trim(chroma)
+        zcr = pad_or_trim(zcr)
+        centroid = pad_or_trim(centroid)
+        bandwidth = pad_or_trim(bandwidth)
+
+        # Stack all features along channel dimension
+        features = np.concatenate([
+            mel,
+            mfcc,
+            pitch_track,
+            contrast,
+            chroma,
+            zcr,
+            centroid,
+            bandwidth
+        ], axis=0)  # shape: (113, MAX_LEN)
+
+        return features
     
     def _generate_explanation(self, confidence, is_ai):
         """Generate a technical explanation for the prediction."""
@@ -61,11 +115,11 @@ class VoiceDetector:
     
     def predict_from_file(self, audio_path):
         """Predict whether audio file is AI-generated or human."""
-        mel = self._audio_to_mel(audio_path)
-        mel_tensor = torch.tensor(mel, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(DEVICE)
+        features = self._extract_features(audio_path)
+        features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(DEVICE)
         
         with torch.no_grad():
-            prob = self.model(mel_tensor).item()
+            prob = self.model(features_tensor).item()
         
         is_ai = prob > 0.5
         confidence = prob if is_ai else (1 - prob)
