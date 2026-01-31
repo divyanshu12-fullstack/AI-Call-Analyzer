@@ -129,20 +129,33 @@ GET /
 
 ### Detect Voice
 ```http
-POST /detect
+POST /api/voice-detection
 Content-Type: application/json
+x-api-key: YOUR_API_KEY
 
 {
-  "audio": "<base64_encoded_audio>"
+  "language": "English",
+  "audioFormat": "mp3",
+  "audioBase64": "<base64_encoded_audio>"
 }
 ```
 
 **Response:**
 ```json
 {
+  "status": "success",
+  "language": "English",
   "classification": "HUMAN" | "AI_GENERATED",
-  "confidence": 0.0 - 1.0,
+  "confidenceScore": 0.0 - 1.0,
   "explanation": "Technical reasoning for the classification"
+}
+```
+
+**Error Response:**
+```json
+{
+  "status": "error",
+  "message": "Error description"
 }
 ```
 
@@ -157,8 +170,13 @@ with open("sample.mp3", "rb") as f:
 
 # Send request
 response = requests.post(
-    "http://localhost:8000/detect",
-    json={"audio": audio_b64}
+    "http://localhost:8000/api/voice-detection",
+    headers={"x-api-key": "your-api-key"},
+    json={
+        "language": "English",
+        "audioFormat": "mp3",
+        "audioBase64": audio_b64
+    }
 )
 
 print(response.json())
@@ -166,10 +184,14 @@ print(response.json())
 
 ### Example Usage (cURL)
 ```bash
-# Encode audio to base64 and send request
-base64 -w 0 sample.mp3 | xargs -I {} curl -X POST http://localhost:8000/detect \
+curl -X POST http://localhost:8000/api/voice-detection \
   -H "Content-Type: application/json" \
-  -d '{"audio": "{}"}'
+  -H "x-api-key: your-api-key" \
+  -d '{
+    "language": "English",
+    "audioFormat": "mp3",
+    "audioBase64": "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU2LjM2LjEwMAAAAAAA..."
+  }'
 ```
 
 ---

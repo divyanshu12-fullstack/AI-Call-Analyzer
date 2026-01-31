@@ -1,11 +1,13 @@
 """
 FastAPI server for AI Voice Detection.
-Exposes a POST /detect endpoint that accepts base64-encoded audio.
+Exposes a POST /api/voice-detection endpoint that accepts base64-encoded audio.
 """
-from fastapi import FastAPI, HTTPException, Header, Security, Depends
+from fastapi import FastAPI, HTTPException, Header, Security, Depends, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ValidationError
 from typing import Optional
 import os
 from inference import VoiceDetector
@@ -42,22 +44,58 @@ app.add_middleware(
 # Initialize detector (loads model once at startup)
 detector = VoiceDetector()
 
+# Custom error handler for standardized error responses
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Return errors in submission spec format: {status: 'error', message: '...'}"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "status": "error",
+            "message": exc.detail
+        }
+    )
+
+# Custom error handler for validation errors
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle FastAPI request validation errors"""
+    return JSONResponse(
+        status_code=400,
+        content={
+            "status": "error",
+            "message": f"Invalid request format or missing fields: {str(exc.errors())}"
+        }
+    )
+
+
+@app.exception_handler(ValidationError)
+async def pydantic_validation_exception_handler(request: Request, exc: ValidationError):
+    """Handle Pydantic validation errors"""
+    return JSONResponse(
+        status_code=400,
+        content={
+            "status": "error",
+            "message": f"Validation error: {str(exc)}"
+        }
+    )
+
 
 class AudioRequest(BaseModel):
-    """Request body containing base64-encoded audio or URL."""
-    audio: Optional[str] = None      # Standard naming
-    audio_url: Optional[str] = None  # URL naming
-    audio_base64: Optional[str] = None # Alternate naming
-    audio_base64_format: Optional[str] = None # Possible exact-label match
-    language: Optional[str] = None   # Optional field from tester
-    audio_format: Optional[str] = None # Optional field from tester
+    """Request body containing base64-encoded audio."""
+    # Primary fields per submission spec (required)
+    language: str  # Tamil, English, Hindi, Malayalam, Telugu
+    audioFormat: str  # mp3
+    audioBase64: str  # Base64-encoded audio
 
 
 class DetectionResponse(BaseModel):
     """Response containing classification results."""
+    status: str = "success"  # Always "success" for successful responses
+    language: str  # Echo back the language from request
     classification: str  # "AI_GENERATED" or "HUMAN"
-    confidence: float    # 0.0 to 1.0
-    explanation: str     # Technical reasoning
+    confidenceScore: float  # 0.0 to 1.0
+    explanation: str  # Technical reasoning
 
 
 @app.get("/")
@@ -70,37 +108,45 @@ def root():
     }
 
 
-@app.post("/detect", response_model=DetectionResponse)
+@app.post("/api/voice-detection", response_model=DetectionResponse)
 def detect_voice(request: AudioRequest, api_key: str = Depends(get_api_key)):
     """
     Detect if audio is AI-generated or human.
     
-    - **audio**: Base64-encoded MP3 or WAV audio file (Optional)
-    - **audio_url**: URL to audio file (Optional)
+    - **language**: Must be one of: Tamil, English, Hindi, Malayalam, Telugu
+    - **audioFormat**: Audio format (mp3)
+    - **audioBase64**: Base64-encoded audio file
     
-    Requires exactly one of audio or audio_url.
     Returns classification, confidence score, and technical explanation.
     """
+    # Supported languages per submission spec
+    SUPPORTED_LANGUAGES = ["Tamil", "English", "Hindi", "Malayalam", "Telugu"]
+    
     try:
-        # Consolidate audio input from possible field names
-        audio_data = request.audio or request.audio_base64 or request.audio_base64_format
-        audio_url = request.audio_url
-
-        # Validate input
-        if not audio_data and not audio_url:
-            raise HTTPException(status_code=400, detail="Must provide either 'audio' (base64) or 'audio_url'")
+        # Validate language
+        if request.language not in SUPPORTED_LANGUAGES:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unsupported language. Must be one of: {', '.join(SUPPORTED_LANGUAGES)}"
+            )
         
-        if audio_data and audio_url:
-            raise HTTPException(status_code=400, detail="Provide only one of 'audio' or 'audio_url', not both")
+        # Validate audio format
+        if request.audioFormat.lower() != "mp3":
+            raise HTTPException(
+                status_code=400,
+                detail="Only MP3 format is supported"
+            )
         
-        # Process request
-        if audio_url:
-            try:
-                result = detector.predict_from_url(audio_url)
-            except ValueError as ve:
-                raise HTTPException(status_code=400, detail=str(ve))
-        else:
-            result = detector.predict_from_base64(audio_data)
+        # Process request using base64 audio
+        result = detector.predict_from_base64(request.audioBase64)
+        
+        # Add required fields to response
+        result['status'] = 'success'
+        result['language'] = request.language
+        
+        # Rename confidence to confidenceScore if needed
+        if 'confidence' in result:
+            result['confidenceScore'] = result.pop('confidence')
             
         return DetectionResponse(**result)
         

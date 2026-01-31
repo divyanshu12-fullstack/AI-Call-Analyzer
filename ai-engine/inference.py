@@ -8,8 +8,6 @@ import numpy as np
 import base64
 import tempfile
 import os
-import urllib.request
-import urllib.error
 from model import VoiceCNN
 
 # Constants
@@ -92,43 +90,6 @@ class VoiceDetector:
             result = self.predict_from_file(temp_path)
         finally:
             os.unlink(temp_path)
-            
-        return result
-
-    def predict_from_url(self, audio_url: str):
-        """Predict from audio URL (downloading temp file)."""
-        # Create temp file
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-            temp_path = f.name
-            
-        try:
-            # Download file
-            # Add User-Agent to avoid 403s from some servers
-            req = urllib.request.Request(
-                audio_url, 
-                data=None, 
-                headers={
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'
-                }
-            )
-            with urllib.request.urlopen(req, timeout=30) as response:
-                with open(temp_path, 'wb') as out_file:
-                    out_file.write(response.read())
-            
-            # Predict
-            result = self.predict_from_file(temp_path)
-            
-        except urllib.error.URLError as e:
-            raise ValueError(f"Failed to download audio: {str(e)}")
-        except Exception as e:
-            raise ValueError(f"Error processing audio URL: {str(e)}")
-        finally:
-            # Clean up
-            if os.path.exists(temp_path):
-                try:
-                    os.unlink(temp_path)
-                except:
-                    pass
             
         return result
 
