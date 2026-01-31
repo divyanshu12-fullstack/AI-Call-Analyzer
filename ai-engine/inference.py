@@ -12,17 +12,15 @@ from model import VoiceResNet
 
 # Constants
 MAX_LEN = 157  # Must match dataset.py
-# Constants
-MAX_LEN = 157  # Must match dataset.py
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "models", "voice_model.pth")
+MODEL_PATH = os.path.join(BASE_DIR, "models", "voice_model_best.pth")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class VoiceDetector:
     def __init__(self, model_path=MODEL_PATH):
         self.model = VoiceResNet().to(DEVICE)
-        self.model.load_state_dict(torch.load("models/voice_model_best.pth", map_location=DEVICE))
+        self.model.load_state_dict(torch.load(model_path, map_location=DEVICE))
         self.model.eval()
         
     def _extract_features(self, audio_path):
