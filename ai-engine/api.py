@@ -2,10 +2,26 @@
 FastAPI server for AI Voice Detection.
 Exposes a POST /detect endpoint that accepts base64-encoded audio.
 """
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Security, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel
+from typing import Optional
+import os
 from inference import VoiceDetector
+
+# Configuration
+API_KEY_NAME = "x-api-key"
+API_KEY = os.getenv("API_KEY", "default-key-change-me")
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+async def get_api_key(api_key_header: str = Security(api_key_header)):
+    if api_key_header == API_KEY:
+        return api_key_header
+    raise HTTPException(
+        status_code=403,
+        detail="Could not validate credentials",
+    )
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -28,8 +44,9 @@ detector = VoiceDetector()
 
 
 class AudioRequest(BaseModel):
-    """Request body containing base64-encoded audio."""
-    audio: str  # Base64-encoded MP3 or WAV
+    """Request body containing base64-encoded audio or URL."""
+    audio: Optional[str] = None      # Base64-encoded MP3 or WAV
+    audio_url: Optional[str] = None  # URL to audio file
 
 
 class DetectionResponse(BaseModel):
@@ -50,22 +67,39 @@ def root():
 
 
 @app.post("/detect", response_model=DetectionResponse)
-def detect_voice(request: AudioRequest):
+def detect_voice(request: AudioRequest, api_key: str = Depends(get_api_key)):
     """
     Detect if audio is AI-generated or human.
     
-    - **audio**: Base64-encoded MP3 or WAV audio file
+    - **audio**: Base64-encoded MP3 or WAV audio file (Optional)
+    - **audio_url**: URL to audio file (Optional)
     
+    Requires exactly one of audio or audio_url.
     Returns classification, confidence score, and technical explanation.
     """
     try:
-        if not request.audio:
-            raise HTTPException(status_code=400, detail="No audio data provided")
+        # Validate input
+        if not request.audio and not request.audio_url:
+            raise HTTPException(status_code=400, detail="Must provide either 'audio' or 'audio_url'")
         
-        result = detector.predict_from_base64(request.audio)
+        if request.audio and request.audio_url:
+            raise HTTPException(status_code=400, detail="Provide only one of 'audio' or 'audio_url', not both")
+        
+        # Process request
+        if request.audio_url:
+            try:
+                result = detector.predict_from_url(request.audio_url)
+            except ValueError as ve:
+                raise HTTPException(status_code=400, detail=str(ve))
+        else:
+            result = detector.predict_from_base64(request.audio)
+            
         return DetectionResponse(**result)
         
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"Error processing request: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing audio: {str(e)}")
 
 
