@@ -48,10 +48,10 @@ ai-engine/temp_tts/
 *.tar.gz
 
 # Model weights and artifacts
-*.pth
-*.pt
-*.ckpt
-ai-engine/models/
+# *.pth
+# *.pt
+# *.ckpt
+# ai-engine/models/
 ai-engine/evaluation_results.txt
 
 # Logs
