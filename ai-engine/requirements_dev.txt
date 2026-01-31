@@ -1,0 +1,12 @@
+torch
+torchaudio
+librosa
+numpy
+soundfile
+fastapi
+uvicorn
+datasets
+huggingface-hub
+pandas
+pyarrow
+gtts

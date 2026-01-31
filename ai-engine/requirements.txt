@@ -1,12 +1,9 @@
 torch
-torchaudio
 librosa
 numpy
 soundfile
 fastapi
 uvicorn
-datasets
-huggingface-hub
-pandas
-pyarrow
-gtts
+python-multipart
+# Removed heavyweight/unused packages that cause build errors on Render:
+# pandas, pyarrow, datasets, huggingface-hub, gtts
