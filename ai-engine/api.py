@@ -47,6 +47,8 @@ class AudioRequest(BaseModel):
     """Request body containing base64-encoded audio or URL."""
     audio: Optional[str] = None      # Base64-encoded MP3 or WAV
     audio_url: Optional[str] = None  # URL to audio file
+    language: Optional[str] = None   # Optional language field from tester
+    audio_format: Optional[str] = None # Optional format field from tester
 
 
 class DetectionResponse(BaseModel):
