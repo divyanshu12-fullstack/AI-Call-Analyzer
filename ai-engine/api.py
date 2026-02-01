@@ -123,6 +123,9 @@ def detect_voice(request: AudioRequest, api_key: str = Depends(get_api_key)):
     
     Returns classification, confidence score, and technical explanation.
     """
+    # Log the request for debugging
+    print(f"Received request: language={request.language}, audioFormat={request.audioFormat}, audioBase64 length={len(request.audioBase64) if request.audioBase64 else 0}")
+    
     # Supported languages per submission spec
     SUPPORTED_LANGUAGES = ["Tamil", "English", "Hindi", "Malayalam", "Telugu"]
     
