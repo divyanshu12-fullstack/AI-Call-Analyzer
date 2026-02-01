@@ -8,7 +8,7 @@ import time
 
 # Configuration
 API_URL = "http://localhost:8000"
-API_KEY = os.getenv("API_KEY", "default-key-change-me")
+API_KEY = os.getenv("API_KEY", "my-super-secret-key-123")
 TEST_FILE_PATH = os.path.join(os.path.dirname(__file__), "data", "test", "human", "human_english_0000.wav")
 
 def print_result(name, success, details=""):
@@ -48,7 +48,7 @@ def test_health():
 def test_auth():
     print("\n--- Testing Authentication ---")
     
-    # Test 1: No API Key
+    # Test 1: No API KeyS
     status, _ = make_request("/detect", data={"audio_url": "http://example.com"})
     print_result("Missing API Key", status == 403, f"Got {status} (Expected 403)")
     

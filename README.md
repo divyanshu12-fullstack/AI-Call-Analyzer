@@ -99,6 +99,31 @@ python train.py
 python evaluate.py
 ```
 
+### Generating Modern AI Voices (XTTS v2)
+
+**Goal**: 250 AI voices per language (200 train / 50 test) for Tamil, English, Hindi, Malayalam, Telugu.
+
+1. Prepare prompts CSV (template provided):
+  - [ai-engine/data/prompts_template.csv](ai-engine/data/prompts_template.csv)
+
+2. (Optional) Add reference speaker WAVs:
+  - Place WAVs in a folder and pass `--speaker-dir`.
+  - If you create subfolders named `en`, `ta`, `hi`, `ml`, `te`, they’ll be used per language.
+
+3. Generate voices:
+
+```bash
+python scripts/generate_xtts_voices.py \
+  --prompts-csv data/prompts_template.csv \
+  --output-dir data
+```
+
+4. Validate dataset counts and audio integrity:
+
+```bash
+python scripts/validate_ai_dataset.py --data-dir data
+```
+
 ### Running the API Server
 
 ```bash

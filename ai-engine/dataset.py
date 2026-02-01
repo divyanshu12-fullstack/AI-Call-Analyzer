@@ -4,7 +4,6 @@ import librosa
 import torch
 import numpy as np
 from torch.utils.data import Dataset
-from scipy.signal import find_peaks
 
 # Fixed spectrogram width (frames) - corresponds to ~5 seconds at 16kHz
 MAX_LEN = 157

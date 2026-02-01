@@ -19,6 +19,8 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 class VoiceDetector:
     def __init__(self, model_path=MODEL_PATH):
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model file not found: {model_path}")
         self.model = VoiceResNet().to(DEVICE)
         self.model.load_state_dict(torch.load(model_path, map_location=DEVICE))
         self.model.eval()
@@ -128,21 +130,37 @@ class VoiceDetector:
             "explanation": self._generate_explanation(confidence, is_ai)
         }
     
+    def _is_mp3_bytes(self, audio_bytes: bytes) -> bool:
+        if not audio_bytes or len(audio_bytes) < 4:
+            return False
+        # ID3 tag header or MPEG frame sync
+        if audio_bytes.startswith(b"ID3"):
+            return True
+        return audio_bytes[0] == 0xFF and (audio_bytes[1] & 0xE0) == 0xE0
+
     def predict_from_base64(self, audio_base64: str):
-        """Predict from base64-encoded audio (MP3 or WAV)."""
-        # Decode base64
-        audio_bytes = base64.b64decode(audio_base64)
-        
+        """Predict from base64-encoded audio (MP3 only)."""
+        if not audio_base64:
+            raise ValueError("audioBase64 is required")
+
+        try:
+            audio_bytes = base64.b64decode(audio_base64, validate=True)
+        except Exception:
+            raise ValueError("Invalid Base64 audio data")
+
+        if not self._is_mp3_bytes(audio_bytes):
+            raise ValueError("Only MP3 audio is supported")
+
         # Save to temp file
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
             f.write(audio_bytes)
             temp_path = f.name
-        
+
         try:
             result = self.predict_from_file(temp_path)
         finally:
             os.unlink(temp_path)
-            
+
         return result
 
 

@@ -2,6 +2,7 @@ torch
 librosa
 numpy
 soundfile
+TTS
 fastapi
 uvicorn
 python-multipart

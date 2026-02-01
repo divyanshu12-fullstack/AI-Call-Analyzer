@@ -6,10 +6,11 @@ Sends a sample audio file as base64 to the API.
 import requests
 import base64
 import json
+import os
 
 # API endpoint
 API_URL = "https://ai-call-analyzer.onrender.com/api/voice-detection"
-API_KEY = "my-super-secret-key-123"  # Replace with your actual API key
+API_KEY = os.getenv("API_KEY")
 
 def encode_audio_to_base64(file_path):
     """Encode audio file to base64 string."""
@@ -21,11 +22,14 @@ def test_api(audio_file_path, language="English"):
     """Test the API with a given audio file."""
     # Encode audio
     audio_base64 = encode_audio_to_base64(audio_file_path)
-    
+
+    audio_ext = os.path.splitext(audio_file_path)[1].lower().lstrip(".")
+    audio_format = audio_ext if audio_ext else "mp3"
+
     # Prepare request payload
     payload = {
         "language": language,
-        "audioFormat": "mp3",
+        "audioFormat": audio_format,
         "audioBase64": audio_base64
     }
     
@@ -48,6 +52,12 @@ def test_api(audio_file_path, language="English"):
         print(f"Error: {e}")
 
 if __name__ == "__main__":
+    if not API_KEY:
+        raise SystemExit("API_KEY env var is not set. Set API_KEY before running.")
+
     # Test with a sample file (replace with actual path)
-    test_audio_path = "data/test/human/human_0000.wav"  # Or any .wav/.mp3 file
+    test_audio_path = "data/test/human/human_0000.wav"  # Use an .mp3 file for compliance
+    if not test_audio_path.lower().endswith(".mp3"):
+        raise SystemExit("Test audio must be .mp3 to match API compliance.")
+
     test_api(test_audio_path, "English")

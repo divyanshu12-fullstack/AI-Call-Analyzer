@@ -297,7 +297,7 @@
 2. Implement proper evaluation metrics (precision, recall, F1-score, ROC-AUC, confusion matrix, per-language accuracy)
 3. Collect modern AI voice samples (Tortoise TTS, Bark, XTTS, ElevenLabs, VALL-E, voice cloning outputs, deepfakes)
 4. Add diverse human data (singing/vocals, conversational speech, emotional speech, noisy environments, phone quality, regional accents, child/elderly voices)
-5. Balance dataset across languages (target 2000+ samples per language for both AI and human)
+5. Balance dataset across languages (target 200 samples per language for both AI and human and 50 for test)
 6. Retrain with expanded data
 7. Add pre-trained audio embeddings (Wav2Vec2, HuBERT, ECAPA-TDNN)
 8. Implement ensemble methods (train 3-5 models, combine predictions)
@@ -376,8 +376,6 @@ Based on [Compliance.md](Compliance.md):
 ## 📝 NOTES
 
 1. **Most Critical Issue**: The model fails on realistic AI voices because training data only includes basic TTS (gTTS, Edge TTS). Must add modern AI samples.
-
-2. **Song Misclassification**: Model marks human songs as AI because training data has no singing. Add vocal/singing datasets immediately.
 
 3. **Language Coverage**: Currently English-heavy. Need balanced data for Tamil, Hindi, Malayalam, Telugu.
 

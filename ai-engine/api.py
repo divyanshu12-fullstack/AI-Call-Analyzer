@@ -18,7 +18,9 @@ load_dotenv()
 
 # Configuration
 API_KEY_NAME = "x-api-key"
-API_KEY = os.getenv("API_KEY", "my-super-secret-key-123")
+API_KEY = os.getenv("API_KEY")
+if not API_KEY:
+    raise RuntimeError("API_KEY environment variable is required")
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 async def get_api_key(api_key_header: str = Security(api_key_header)):
@@ -159,6 +161,8 @@ def detect_voice(request: AudioRequest, api_key: str = Depends(get_api_key)):
         
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         print(f"Error processing request: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing audio: {str(e)}")
