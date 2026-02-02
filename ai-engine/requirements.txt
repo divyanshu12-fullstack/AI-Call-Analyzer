@@ -1,11 +1,45 @@
-torch
-librosa
-numpy
-soundfile
-TTS
-fastapi
-uvicorn
-python-multipart
-python-dotenv
-# Removed heavyweight/unused packages that cause build errors on Render:
-# pandas, pyarrow, datasets, huggingface-hub, gtts
+# AI Voice Detector - Production Requirements
+# Generated from torchgpu environment - February 2, 2026
+
+# Core ML Framework
+torch==2.5.1+cu121
+torchaudio==2.5.1+cu121
+
+# Audio Processing
+librosa==0.11.0
+soundfile==0.13.1
+audioread==3.1.0
+soxr==1.0.0
+
+# TTS for Data Generation
+TTS==0.22.0
+edge-tts==7.2.7
+
+# Scientific Computing
+numpy==1.26.4
+scipy==1.17.0
+
+# Web Framework & API
+fastapi==0.128.0
+uvicorn==0.40.0
+python-multipart==0.0.22
+starlette==0.50.0
+h11==0.16.0
+
+# Configuration
+python-dotenv==1.2.1
+
+# Machine Learning Metrics & Visualization
+scikit-learn==1.8.0
+matplotlib==3.10.8
+seaborn==0.13.2
+
+# Data Processing
+pandas==1.5.3
+joblib==1.5.3
+
+# Utilities
+requests==2.32.5
+tqdm==4.67.2
+click==8.3.1
+pydantic==2.12.5

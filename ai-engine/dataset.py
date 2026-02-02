@@ -9,31 +9,93 @@ from torch.utils.data import Dataset
 MAX_LEN = 157
 
 class VoiceDataset(Dataset):
-    def __init__(self, root_dir):
+    def __init__(self, root_dir, augment=False):
+        """
+        Args:
+            root_dir: Path to data directory (should contain 'human' and 'ai' subdirectories)
+            augment: Whether to apply data augmentation (for training data)
+        """
         self.files = []
         self.labels = []
+        self.augment = augment
 
         for label, folder in enumerate(["human", "ai"]):
             folder_path = os.path.join(root_dir, folder)
-
-            for file in os.listdir(folder_path):
-                if file.endswith(".wav"):
-                    self.files.append(os.path.join(folder_path, file))
-                    self.labels.append(label)
+            
+            # Walk through directory tree to find all .wav files (handles nested subdirectories)
+            for root, dirs, files in os.walk(folder_path):
+                for file in files:
+                    if file.endswith(".wav"):
+                        self.files.append(os.path.join(root, file))
+                        self.labels.append(label)
 
     def __len__(self):
         return len(self.files)
+
+    def _augment_audio(self, audio):
+        """Apply random augmentation to audio during training."""
+        # Time stretching (0.8x - 1.2x speed)
+        if np.random.rand() < 0.3:
+            rate = np.random.uniform(0.8, 1.2)
+            audio = librosa.effects.time_stretch(audio, rate=rate)
+        
+        # Pitch shifting (±2 semitones)
+        if np.random.rand() < 0.3:
+            n_steps = np.random.randint(-2, 3)
+            audio = librosa.effects.pitch_shift(audio, sr=16000, n_steps=n_steps)
+        
+        # Background noise injection (SNR 10-30 dB)
+        if np.random.rand() < 0.3:
+            noise = np.random.normal(0, 0.005, len(audio))
+            snr_db = np.random.uniform(10, 30)
+            snr_linear = 10 ** (snr_db / 20)
+            audio = audio + noise / snr_linear
+            audio = np.clip(audio, -1.0, 1.0)
+        
+        # Random gain adjustment
+        if np.random.rand() < 0.3:
+            gain = np.random.uniform(0.8, 1.2)
+            audio = audio * gain
+            audio = np.clip(audio, -1.0, 1.0)
+        
+        return audio
+    
+    def _apply_specaugment(self, mel):
+        """Apply SpecAugment: time and frequency masking."""
+        # Time masking: mask consecutive time steps
+        if np.random.rand() < 0.3:
+            t_mask = np.random.randint(10, 30)  # mask up to 30 frames
+            t_start = np.random.randint(0, max(1, mel.shape[1] - t_mask))
+            mel = mel.copy()
+            mel[:, t_start:t_start + t_mask] = 0
+        
+        # Frequency masking: mask consecutive mel bands
+        if np.random.rand() < 0.3:
+            f_mask = np.random.randint(5, 15)  # mask up to 15 mel bands
+            f_start = np.random.randint(0, max(1, mel.shape[0] - f_mask))
+            mel = mel.copy()
+            mel[f_start:f_start + f_mask, :] = 0
+        
+        return mel
 
     def __getitem__(self, index):
         file_path = self.files[index]
         label = self.labels[index]
 
         audio, sr = librosa.load(file_path, sr=16000)
+        
+        # Apply augmentation during training
+        if self.augment:
+            audio = self._augment_audio(audio)
 
         # Mel spectrogram
         mel = librosa.feature.melspectrogram(y=audio, sr=sr, n_mels=64)
         mel = librosa.power_to_db(mel)
         mel = (mel - mel.mean()) / (mel.std() + 1e-6)
+        
+        # Apply SpecAugment (time and frequency masking) during training
+        if self.augment:
+            mel = self._apply_specaugment(mel)
 
         # MFCCs (13 coefficients + deltas)
         mfcc = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13)

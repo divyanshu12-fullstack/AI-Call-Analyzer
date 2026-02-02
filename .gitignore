@@ -80,3 +80,5 @@ htmlcov/
 *.temp
 
 .agent
+
+./ai-engine/.env

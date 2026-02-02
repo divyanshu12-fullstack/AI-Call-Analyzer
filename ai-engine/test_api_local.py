@@ -48,17 +48,17 @@ def test_health():
 def test_auth():
     print("\n--- Testing Authentication ---")
     
-    # Test 1: No API KeyS
-    status, _ = make_request("/detect", data={"audio_url": "http://example.com"})
+    # Test 1: No API Key
+    status, _ = make_request("/api/voice-detection", data={"language": "English", "audioFormat": "mp3", "audioBase64": "test"})
     print_result("Missing API Key", status == 403, f"Got {status} (Expected 403)")
     
     # Test 2: Invalid API Key
-    status, _ = make_request("/detect", data={"audio_url": "http://example.com"}, headers={"x-api-key": "wrong-key"})
+    status, _ = make_request("/api/voice-detection", data={"language": "English", "audioFormat": "mp3", "audioBase64": "test"}, headers={"x-api-key": "wrong-key"})
     print_result("Invalid API Key", status == 403, f"Got {status} (Expected 403)")
     
     # Test 3: Valid API Key (but bad request to ensure auth passed)
-    # We send no data, should get 400 (Bad Request), NOT 403 (Forbidden)
-    status, _ = make_request("/detect", data={}, headers={"x-api-key": API_KEY})
+    # We send incomplete data, should get 400 (Bad Request), NOT 403 (Forbidden)
+    status, _ = make_request("/api/voice-detection", data={}, headers={"x-api-key": API_KEY})
     print_result("Valid API Key", status == 400, f"Got {status} (Expected 400)")
 
 def test_base64_inference():
@@ -72,37 +72,23 @@ def test_base64_inference():
         audio_content = f.read()
         audio_b64 = base64.b64encode(audio_content).decode('utf-8')
         
-    payload = {"audio": audio_b64}
+    payload = {"audioBase64": audio_b64, "language": "English", "audioFormat": "mp3"}
     headers = {"x-api-key": API_KEY}
     
     start_time = time.time()
-    status, response = make_request("/detect", data=payload, headers=headers)
+    status, response = make_request("/api/voice-detection", data=payload, headers=headers)
     duration = time.time() - start_time
     
     success = status == 200 and "classification" in response
     print_result("Base64 Prediction", success, f"Time: {duration:.2f}s")
     if success:
-        print(f"   Result: {response['classification']} (Confidence: {response['confidence']})")
+        print(f"   Result: {response['classification']} (Confidence: {response['confidenceScore']})")
 
 def test_url_inference():
-    print("\n--- Testing URL Inference ---")
-    
-    # Use local file URL for reliability
-    test_url = f"file:///{TEST_FILE_PATH.replace(os.sep, '/')}"
-    
-    payload = {"audio_url": test_url}
-    headers = {"x-api-key": API_KEY}
-    
-    start_time = time.time()
-    status, response = make_request("/detect", data=payload, headers=headers)
-    duration = time.time() - start_time
-    
-    success = status == 200 and "classification" in response
-    print_result("URL Prediction", success, f"Time: {duration:.2f}s")
-    if success:
-        print(f"   Result: {response['classification']} (Confidence: {response['confidence']})")
-    else:
-        print(f"   Error: {status} - {response}")
+    print("\n--- Testing URL Inference (Skipped) ---")
+    # URL inference not currently supported by API
+    # The API expects audioBase64, language, and audioFormat
+    print("⚠️ URL-based inference not implemented. API only supports base64-encoded audio.")
 
 if __name__ == "__main__":
     print("Starting API Tests...")

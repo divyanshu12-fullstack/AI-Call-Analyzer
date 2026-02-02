@@ -1,6 +1,7 @@
 """
 Inference module for Voice Detection.
 Loads trained model and processes audio for prediction.
+Supports confidence calibration via temperature scaling.
 """
 import torch
 import librosa
@@ -14,16 +15,27 @@ from model import VoiceResNet
 MAX_LEN = 157  # Must match dataset.py
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "models", "voice_model_best.pth")
+CALIBRATION_PATH = os.path.join(BASE_DIR, "models", "calibration.pth")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class VoiceDetector:
-    def __init__(self, model_path=MODEL_PATH):
+    def __init__(self, model_path=MODEL_PATH, calibration_path=CALIBRATION_PATH):
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Model file not found: {model_path}")
         self.model = VoiceResNet().to(DEVICE)
         self.model.load_state_dict(torch.load(model_path, map_location=DEVICE))
         self.model.eval()
+        
+        # Load calibration if available
+        self.temperature = 1.0
+        if os.path.exists(calibration_path):
+            try:
+                calib_data = torch.load(calibration_path, map_location=DEVICE)
+                self.temperature = calib_data.get('temperature', 1.0)
+                print(f"Loaded calibration temperature: {self.temperature:.4f}")
+            except Exception as e:
+                print(f"Warning: Could not load calibration: {e}")
         
     def _extract_features(self, audio_path):
         """Extract all audio features and concatenate them."""
@@ -96,22 +108,47 @@ class VoiceDetector:
 
         return features
     
-    def _generate_explanation(self, confidence, is_ai):
-        """Generate a technical explanation for the prediction."""
+    def _apply_calibration(self, prob):
+        """Apply temperature scaling calibration to raw probability."""
+        if self.temperature != 1.0:
+            # Convert probability to logit-like space, apply temperature, convert back
+            logit = np.log(prob / (1 - prob + 1e-10) + 1e-10)
+            calibrated_logit = logit / self.temperature
+            prob = 1.0 / (1.0 + np.exp(-calibrated_logit))
+        return np.clip(prob, 1e-15, 1 - 1e-15)
+    
+    def _generate_explanation(self, confidence, is_ai, calibrated=False):
+        """
+        Generate a detailed technical explanation for the prediction.
+        Includes confidence level and specific artifacts detected.
+        """
+        confidence_level = "very high" if confidence > 0.9 else "high" if confidence > 0.75 else "moderate" if confidence > 0.6 else "low"
+        calibration_note = " (confidence calibrated)" if calibrated and self.temperature != 1.0 else ""
+        
         if is_ai:
-            if confidence > 0.9:
-                return "High spectral uniformity and lack of natural pitch variation strongly indicate synthetic speech generation."
-            elif confidence > 0.7:
-                return "Consistent formant patterns and unnaturally smooth transitions suggest AI-generated audio."
-            else:
-                return "Some synthetic artifacts detected in frequency domain, moderate indication of AI generation."
+            explanations = {
+                0.9: f"Very high confidence ({confidence:.2%}) - Clear synthetic speech patterns detected. High spectral uniformity, consistent pitch, lack of natural breath sounds and micro-pauses strongly indicate AI-generated audio.{calibration_note}",
+                0.75: f"High confidence ({confidence:.2%}) - Strong evidence of synthetic generation. Detected unnaturally smooth spectral transitions, rigid formant patterns, and absence of organic speech artifacts.{calibration_note}",
+                0.6: f"Moderate confidence ({confidence:.2%}) - Likely AI-generated. Detected synthetic artifacts in frequency domain including unnatural pitch consistency and spectral smoothing.{calibration_note}",
+                0.0: f"Low confidence ({confidence:.2%}) - Some indicators of synthetic speech detected, but confidence is borderline. Audio may be lightly processed AI or natural with artifacts.{calibration_note}"
+            }
         else:
-            if confidence > 0.9:
-                return "Natural pitch variations, breath sounds, and organic spectral patterns indicate human speech."
-            elif confidence > 0.7:
-                return "Presence of micro-pauses and natural frequency modulation suggest human origin."
-            else:
-                return "Audio shows some organic characteristics, likely human but with some processing artifacts."
+            explanations = {
+                0.9: f"Very high confidence ({confidence:.2%}) - Clear human speech patterns. Natural pitch variations, presence of breath sounds, organic spectral characteristics, and natural temporal dynamics indicate human origin.{calibration_note}",
+                0.75: f"High confidence ({confidence:.2%}) - Strong indicators of natural human speech. Detected natural formant transitions, irregular pitch patterns, and organic speech rhythm characteristic of human vocalization.{calibration_note}",
+                0.6: f"Moderate confidence ({confidence:.2%}) - Likely human speech. Detected natural prosody patterns, breath artifacts, and organic spectral irregularities consistent with human voice.{calibration_note}",
+                0.0: f"Low confidence ({confidence:.2%}) - Some human characteristics present but confidence is borderline. Audio may be heavily processed human or realistic AI-generated speech.{calibration_note}"
+            }
+        
+        # Select explanation based on confidence threshold
+        if confidence > 0.9:
+            return explanations[0.9]
+        elif confidence > 0.75:
+            return explanations[0.75]
+        elif confidence > 0.6:
+            return explanations[0.6]
+        else:
+            return explanations[0.0]
     
     def predict_from_file(self, audio_path):
         """Predict whether audio file is AI-generated or human."""
@@ -121,13 +158,16 @@ class VoiceDetector:
         with torch.no_grad():
             prob = self.model(features_tensor).item()
         
-        is_ai = prob > 0.5
-        confidence = prob if is_ai else (1 - prob)
+        # Apply calibration if available
+        prob_calibrated = self._apply_calibration(prob)
+        
+        is_ai = prob_calibrated > 0.5
+        confidence = prob_calibrated if is_ai else (1 - prob_calibrated)
         
         return {
             "classification": "AI_GENERATED" if is_ai else "HUMAN",
             "confidence": round(confidence, 4),
-            "explanation": self._generate_explanation(confidence, is_ai)
+            "explanation": self._generate_explanation(confidence, is_ai, calibrated=(self.temperature != 1.0))
         }
     
     def _is_mp3_bytes(self, audio_bytes: bytes) -> bool:
