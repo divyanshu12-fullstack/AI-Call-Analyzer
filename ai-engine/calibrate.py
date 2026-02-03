@@ -38,7 +38,7 @@ def calibrate_model(train_data_dir="data/train", model_path="models/voice_model_
         raise FileNotFoundError(f"Model not found: {model_path}")
     
     model = VoiceResNet().to(device)
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
     model.eval()
     
     # Calibrate and save

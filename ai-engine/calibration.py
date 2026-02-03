@@ -23,7 +23,7 @@ class TemperatureScaling(nn.Module):
     
     def load(self, path):
         """Load temperature parameter."""
-        data = torch.load(path)
+        data = torch.load(path, weights_only=True)
         self.temperature.fill_(data['temperature'])
 
 

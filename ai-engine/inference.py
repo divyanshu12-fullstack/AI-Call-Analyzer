@@ -24,14 +24,14 @@ class VoiceDetector:
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Model file not found: {model_path}")
         self.model = VoiceResNet().to(DEVICE)
-        self.model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+        self.model.load_state_dict(torch.load(model_path, map_location=DEVICE, weights_only=True))
         self.model.eval()
         
         # Load calibration if available
         self.temperature = 1.0
         if os.path.exists(calibration_path):
             try:
-                calib_data = torch.load(calibration_path, map_location=DEVICE)
+                calib_data = torch.load(calibration_path, map_location=DEVICE, weights_only=True)
                 self.temperature = calib_data.get('temperature', 1.0)
                 print(f"Loaded calibration temperature: {self.temperature:.4f}")
             except Exception as e:
@@ -150,26 +150,132 @@ class VoiceDetector:
         else:
             return explanations[0.0]
     
+    def _extract_windows(self, audio_path, window_sec=5.0, stride_sec=2.5):
+        """Extract multiple 5-second feature windows from long audio."""
+        audio, sr = librosa.load(audio_path, sr=16000)
+        duration = len(audio) / sr
+        
+        # Calculate samples per window and stride
+        window_size = int(window_sec * sr)
+        stride_size = int(stride_sec * sr)
+        
+        windows = []
+        
+        # If shorter than window, just pad and take one
+        if len(audio) < window_size:
+            windows.append(self._process_segment(audio, sr))
+        else:
+            # Sliding window
+            for start in range(0, len(audio) - window_size + 1, stride_size):
+                segment = audio[start : start + window_size]
+                windows.append(self._process_segment(segment, sr))
+            
+            # Ensure we don't miss the tail end if it's significant (> 1 sec)
+            if len(audio) % stride_size > sr:
+                segment = audio[-window_size:]
+                windows.append(self._process_segment(segment, sr))
+
+        return np.array(windows)
+
+    def _process_segment(self, audio, sr):
+        """Extract features for a specific audio segment."""
+        # Mel spectrogram
+        mel = librosa.feature.melspectrogram(y=audio, sr=sr, n_mels=64)
+        mel = librosa.power_to_db(mel)
+        mel = (mel - mel.mean()) / (mel.std() + 1e-6)
+
+        # MFCCs (13 coefficients + deltas)
+        mfcc = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13)
+        mfcc_delta = librosa.feature.delta(mfcc)
+        mfcc = np.concatenate([mfcc, mfcc_delta], axis=0)
+        mfcc = (mfcc - mfcc.mean()) / (mfcc.std() + 1e-6)
+
+        # Pitch (F0)
+        pitches, magnitudes = librosa.piptrack(y=audio, sr=sr)
+        pitch_track = pitches.max(axis=0)
+        pitch_track = np.expand_dims(pitch_track, axis=0)
+        pitch_track = (pitch_track - pitch_track.mean()) / (pitch_track.std() + 1e-6)
+
+        # Spectral contrast
+        contrast = librosa.feature.spectral_contrast(y=audio, sr=sr)
+        contrast = (contrast - contrast.mean()) / (contrast.std() + 1e-6)
+
+        # Chroma
+        chroma = librosa.feature.chroma_stft(y=audio, sr=sr)
+        chroma = (chroma - chroma.mean()) / (chroma.std() + 1e-6)
+
+        # Zero-crossing rate
+        zcr = librosa.feature.zero_crossing_rate(y=audio)
+        zcr = (zcr - zcr.mean()) / (zcr.std() + 1e-6)
+
+        # Spectral centroid and bandwidth
+        centroid = librosa.feature.spectral_centroid(y=audio, sr=sr)
+        bandwidth = librosa.feature.spectral_bandwidth(y=audio, sr=sr)
+        centroid = (centroid - centroid.mean()) / (centroid.std() + 1e-6)
+        bandwidth = (bandwidth - bandwidth.mean()) / (bandwidth.std() + 1e-6)
+
+        # Pad or trim
+        def pad_or_trim(feat, max_len=MAX_LEN):
+            if feat.shape[1] < max_len:
+                pad_width = max_len - feat.shape[1]
+                feat = np.pad(feat, ((0, 0), (0, pad_width)), mode='constant')
+            else:
+                feat = feat[:, :max_len]
+            return feat
+
+        features = np.concatenate([
+            pad_or_trim(mel), pad_or_trim(mfcc), pad_or_trim(pitch_track),
+            pad_or_trim(contrast), pad_or_trim(chroma), pad_or_trim(zcr),
+            pad_or_trim(centroid), pad_or_trim(bandwidth)
+        ], axis=0)
+        
+        return features
+
     def predict_from_file(self, audio_path):
-        """Predict whether audio file is AI-generated or human."""
-        features = self._extract_features(audio_path)
-        features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(DEVICE)
-        
-        with torch.no_grad():
-            prob = self.model(features_tensor).item()
-        
-        # Apply calibration if available
-        prob_calibrated = self._apply_calibration(prob)
-        
-        is_ai = prob_calibrated > 0.5
-        confidence = prob_calibrated if is_ai else (1 - prob_calibrated)
-        
-        return {
-            "classification": "AI_GENERATED" if is_ai else "HUMAN",
-            "confidence": round(confidence, 4),
-            "explanation": self._generate_explanation(confidence, is_ai, calibrated=(self.temperature != 1.0))
-        }
-    
+        """Predict using a sliding window to handle long dialogues."""
+        try:
+            # Extract all windows (e.g., 30s audio -> ~10-12 overlapping windows)
+            windows = self._extract_windows(audio_path)
+            windows_tensor = torch.tensor(windows, dtype=torch.float32).to(DEVICE)
+            
+            with torch.no_grad():
+                # Model handles batch of windows efficiently
+                probs = self.model(windows_tensor).squeeze(-1).cpu().numpy()
+            
+            # If probs is a single value (one window), wrap it in a list
+            if probs.ndim == 0:
+                probs = np.array([probs])
+                
+            # Calibrate all probabilities
+            calibrated_probs = [self._apply_calibration(p) for p in probs]
+            
+            # Aggregation Strategy:
+            # 1. If any window is EXTREMELY likely AI (e.g. > 90%), flag as AI.
+            # 2. Otherwise, take the mean.
+            max_prob = max(calibrated_probs)
+            avg_prob = sum(calibrated_probs) / len(calibrated_probs)
+            
+            if max_prob > 0.90:
+                final_prob = max_prob
+            else:
+                final_prob = avg_prob
+                
+            is_ai = final_prob > 0.5
+            confidence = final_prob if is_ai else (1 - final_prob)
+            
+            return {
+                "classification": "AI_GENERATED" if is_ai else "HUMAN",
+                "confidence": round(float(confidence), 4),
+                "explanation": self._generate_explanation(confidence, is_ai, calibrated=(self.temperature != 1.0)),
+                "meta": {
+                    "windows_analyzed": len(calibrated_probs),
+                    "max_ai_prob": round(float(max_prob), 4),
+                    "avg_ai_prob": round(float(avg_prob), 4)
+                }
+            }
+        except Exception as e:
+            print(f"Prediction error: {e}")
+            raise e    
     def _is_mp3_bytes(self, audio_bytes: bytes) -> bool:
         if not audio_bytes or len(audio_bytes) < 4:
             return False

@@ -21,93 +21,73 @@ class VoiceDataset(Dataset):
 
         for label, folder in enumerate(["human", "ai"]):
             folder_path = os.path.join(root_dir, folder)
-            
-            # Walk through directory tree to find all .wav files (handles nested subdirectories)
-            for root, dirs, files in os.walk(folder_path):
-                for file in files:
-                    if file.endswith(".wav"):
-                        self.files.append(os.path.join(root, file))
-                        self.labels.append(label)
+
+            for file in os.listdir(folder_path):
+                if file.endswith(".wav"):
+                    self.files.append(os.path.join(folder_path, file))
+                    self.labels.append(label)
 
     def __len__(self):
         return len(self.files)
 
-    def _augment_audio(self, audio):
-        """Apply random augmentation to audio during training."""
-        # Time stretching (0.8x - 1.2x speed)
-        if np.random.rand() < 0.3:
-            rate = np.random.uniform(0.8, 1.2)
-            audio = librosa.effects.time_stretch(audio, rate=rate)
-        
-        # Pitch shifting (±2 semitones)
-        if np.random.rand() < 0.3:
-            n_steps = np.random.randint(-2, 3)
-            audio = librosa.effects.pitch_shift(audio, sr=16000, n_steps=n_steps)
-        
-        # Background noise injection (SNR 10-30 dB)
-        if np.random.rand() < 0.3:
-            noise = np.random.normal(0, 0.005, len(audio))
-            snr_db = np.random.uniform(10, 30)
-            snr_linear = 10 ** (snr_db / 20)
-            audio = audio + noise / snr_linear
-            audio = np.clip(audio, -1.0, 1.0)
-        
-        # Random gain adjustment
-        if np.random.rand() < 0.3:
-            gain = np.random.uniform(0.8, 1.2)
-            audio = audio * gain
-            audio = np.clip(audio, -1.0, 1.0)
-        
+    def _augment_audio(self, audio, sr):
+        """Apply random augmentations to audio."""
+        # 1. Add Gaussian Noise (Simulate background hiss)
+        if np.random.random() < 0.5:
+            noise_amp = 0.005 * np.random.uniform() * np.amax(audio)
+            audio = audio + noise_amp * np.random.normal(size=audio.shape)
+
+        # 2. Time Stretch (Speed up / Slow down without pitch change)
+        if np.random.random() < 0.3:
+            rate = np.random.uniform(0.9, 1.1)
+            audio = librosa.effects.time_stretch(y=audio, rate=rate)
+
+        # 3. Pitch Shift (Simulate intonation var)
+        if np.random.random() < 0.3:
+            steps = np.random.uniform(-1, 1)
+            audio = librosa.effects.pitch_shift(y=audio, sr=sr, n_steps=steps)
+            
         return audio
-    
-    def _apply_specaugment(self, mel):
-        """Apply SpecAugment: time and frequency masking."""
-        # Time masking: mask consecutive time steps
-        if np.random.rand() < 0.3:
-            t_mask = np.random.randint(10, 30)  # mask up to 30 frames
-            t_start = np.random.randint(0, max(1, mel.shape[1] - t_mask))
-            mel = mel.copy()
-            mel[:, t_start:t_start + t_mask] = 0
-        
-        # Frequency masking: mask consecutive mel bands
-        if np.random.rand() < 0.3:
-            f_mask = np.random.randint(5, 15)  # mask up to 15 mel bands
-            f_start = np.random.randint(0, max(1, mel.shape[0] - f_mask))
-            mel = mel.copy()
-            mel[f_start:f_start + f_mask, :] = 0
-        
-        return mel
 
     def __getitem__(self, index):
         file_path = self.files[index]
         label = self.labels[index]
 
-        audio, sr = librosa.load(file_path, sr=16000)
-        
-        # Apply augmentation during training
+        try:
+            audio, sr = librosa.load(file_path, sr=16000)
+        except Exception as e:
+            print(f"Error loading {file_path}: {e}")
+            # Fallback to a zero array if load fails
+            audio = np.zeros(16000 * 5)
+            sr = 16000
+
+        # Apply augmentation ONLY for training data
         if self.augment:
-            audio = self._augment_audio(audio)
+            audio = self._augment_audio(audio, sr)
+
+        # Ensure minimum length to avoid pitch tracking errors
+        if len(audio) < 1000:
+            audio = np.pad(audio, (0, 1000 - len(audio)))
 
         # Mel spectrogram
         mel = librosa.feature.melspectrogram(y=audio, sr=sr, n_mels=64)
         mel = librosa.power_to_db(mel)
         mel = (mel - mel.mean()) / (mel.std() + 1e-6)
-        
-        # Apply SpecAugment (time and frequency masking) during training
-        if self.augment:
-            mel = self._apply_specaugment(mel)
 
         # MFCCs (13 coefficients + deltas)
         mfcc = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13)
         mfcc_delta = librosa.feature.delta(mfcc)
-        mfcc = np.concatenate([mfcc, mfcc_delta], axis=0)  # shape: (26, T)
+        mfcc = np.concatenate([mfcc, mfcc_delta], axis=0)
         mfcc = (mfcc - mfcc.mean()) / (mfcc.std() + 1e-6)
 
         # Pitch (F0)
-        pitches, magnitudes = librosa.piptrack(y=audio, sr=sr)
-        pitch_track = pitches.max(axis=0)
-        pitch_track = np.expand_dims(pitch_track, axis=0)  # (1, T)
-        pitch_track = (pitch_track - pitch_track.mean()) / (pitch_track.std() + 1e-6)
+        try:
+            pitches, magnitudes = librosa.piptrack(y=audio, sr=sr)
+            pitch_track = pitches.max(axis=0)
+            pitch_track = np.expand_dims(pitch_track, axis=0)
+            pitch_track = (pitch_track - pitch_track.mean()) / (pitch_track.std() + 1e-6)
+        except Exception:
+            pitch_track = np.zeros((1, mel.shape[1]))
 
         # Spectral contrast
         contrast = librosa.feature.spectral_contrast(y=audio, sr=sr)
@@ -155,9 +135,9 @@ class VoiceDataset(Dataset):
             zcr,
             centroid,
             bandwidth
-        ], axis=0)  # shape: (C, MAX_LEN)
+        ], axis=0)  # shape: (113, MAX_LEN)
 
-        features = torch.tensor(features, dtype=torch.float32).unsqueeze(0)  # (1, C, MAX_LEN)
-        features = features.squeeze(0)  # (C, MAX_LEN)
+        features = torch.tensor(features, dtype=torch.float32).unsqueeze(0)
+        features = features.squeeze(0)
 
         return features, torch.tensor(label, dtype=torch.float32)
