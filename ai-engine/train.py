@@ -35,7 +35,21 @@ val_loader = DataLoader(val_data, batch_size=8, num_workers=0)
 
 model = VoiceResNet().to(device)
 
-criterion = nn.BCELoss()
+# Custom Focal Loss for better hard-example mining
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2.0):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.bce = nn.BCELoss(reduction='none')
+
+    def forward(self, inputs, targets):
+        bce_loss = self.bce(inputs, targets)
+        pt = torch.exp(-bce_loss)  # pt is the probability of being right
+        focal_loss = self.alpha * (1-pt)**self.gamma * bce_loss
+        return focal_loss.mean()
+
+criterion = FocalLoss()  # Replaces standard BCELoss
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 EPOCHS = 50
@@ -53,7 +67,8 @@ for epoch in range(EPOCHS):
     for x, y in train_loader:
         x = x.to(device)
         y = y.float().to(device)
-        preds = model(x).squeeze()
+        preds = model(x)
+        y = y.view(-1, 1)  # Ensure target is (batch, 1)
         loss = criterion(preds, y)
         optimizer.zero_grad()
         loss.backward()
@@ -67,7 +82,8 @@ for epoch in range(EPOCHS):
         for x, y in val_loader:
             x = x.to(device)
             y = y.float().to(device)
-            preds = model(x).squeeze()
+            preds = model(x)
+            y = y.view(-1, 1)
             loss = criterion(preds, y)
             val_loss += loss.item()
 

@@ -18,10 +18,10 @@
 ## 🌟 Features
 
 - **Multilingual Support** — Specialized for English, Hindi, Tamil, Telugu, and Malayalam.
-- **ResNet Architecture** — Uses a deep Residual Network for superior pattern recognition in audio spectrograms.
+- **SE-ResNet Architecture** — **Squeeze-and-Excitation** Attention mechanism dynamically weights Pitch vs. Spectral features for context-aware detection.
 - **Sliding Window Inference** — Analyzes entire long-form dialogues by scanning 5-second overlapping chunks.
 - **Calibrated Confidence** — Implements Temperature Scaling to ensure confidence scores are statistically honest.
-- **Advanced Augmentation** — Trained with Gaussian noise, pitch shifting, and time stretching for real-world robustness.
+- **Real-World Robustness** — Trained with **Telephony Simulation** (Bandpass/Gain), **SpecAugment** (Masking), and **Channel Dropout** (Zeroing Pitch/ZCR) to prevent overfitting.
 
 ---
 
@@ -39,8 +39,8 @@
 │                                                                    │        │
 │                                                                    ▼        │
 │   ┌────────────┐     ┌────────────┐     ┌───────────┐     ┌─────────────┐   │
-│   │ JSON       │◀────│ Temp Scale │◀────│ Max/Mean  │◀────│VoiceResNet18│   │
-│   │ Response   │     │ Calibration│     │ Aggregator│     │ Classifier  │   │
+│   │ JSON       │◀────│ Temp Scale │◀────│ Max/Mean  │◀────│SE-ResNet-18 │   │
+│   │ Response   │     │ Calibration│     │ Aggregator│     │ (Attention) │   │
 │   └────────────┘     └────────────┘     └───────────┘     └─────────────┘   │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -126,11 +126,12 @@ The model doesn't just look at a spectrogram. It extracts **11 acoustic channels
 - **Chroma STFT** (12 channels)
 - **ZCR, Centroid, Bandwidth** (3 channels)
 
-### Architecture: VoiceResNet
-A custom deep residual network with:
+### Architecture: SE-VoiceResNet
+A custom deep residual network enhanced with **Squeeze-and-Excitation (SE) Blocks**:
 - **Residual Blocks**: 4 Layers of basic blocks for deep feature learning.
-- **Dropout**: 0.3-0.4 probability to prevent over-fitting.
-- **Aggregation**: Adaptive Average Pooling for length-independent classification.
+- **Attention (SE)**: Adaptive average pooling blocks that learn to re-weight channels (e.g., ignoring Pitch if it's noisy) for every single inference.
+- **Dropout**: 0.4 probability to prevent over-fitting.
+- **Focal Loss**: Trained with Focal Loss to prioritize hard-to-classify examples over easy ones.
 
 ---
 
@@ -141,7 +142,7 @@ A custom deep residual network with:
 | **Accuracy** | **97.08%** |
 | **Recall (AI Detection)** | **100.00%** |
 | **Precision (Human)** | **100.00%** |
-| **ROC-AUC** | **0.9959** |
+| **ROC-AUC** | **0.9980** |
 
 *Note: Benchmarked on a balanced set of 565 samples across 5 languages.*
 

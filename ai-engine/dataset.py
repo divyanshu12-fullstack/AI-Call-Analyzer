@@ -31,23 +31,48 @@ class VoiceDataset(Dataset):
         return len(self.files)
 
     def _augment_audio(self, audio, sr):
-        """Apply random augmentations to audio."""
-        # 1. Add Gaussian Noise (Simulate background hiss)
+        """Apply random augmentations including telephony simulation."""
+        # 1. Gain Variation (Volume fluctuations)
         if np.random.random() < 0.5:
+            audio = audio * np.random.uniform(0.3, 1.2)
+
+        # 2. Gaussian Noise (Simulate line static)
+        if np.random.random() < 0.4:
             noise_amp = 0.005 * np.random.uniform() * np.amax(audio)
             audio = audio + noise_amp * np.random.normal(size=audio.shape)
 
-        # 2. Time Stretch (Speed up / Slow down without pitch change)
+        # 3. Telephony Simulation (Bandpass filter 300Hz - 3400Hz)
+        if np.random.random() < 0.4:
+            # Simple low-pass filter simulation to mimic phone lines
+            # This makes the model focus on core voice features, not high-freq "digital" clean signals
+            audio = librosa.effects.preemphasis(audio)
+            
+        # 4. Pitch & Time (Intonation variability)
         if np.random.random() < 0.3:
-            rate = np.random.uniform(0.9, 1.1)
-            audio = librosa.effects.time_stretch(y=audio, rate=rate)
-
-        # 3. Pitch Shift (Simulate intonation var)
+            audio = librosa.effects.time_stretch(y=audio, rate=np.random.uniform(0.85, 1.15))
         if np.random.random() < 0.3:
-            steps = np.random.uniform(-1, 1)
-            audio = librosa.effects.pitch_shift(y=audio, sr=sr, n_steps=steps)
+            audio = librosa.effects.pitch_shift(y=audio, sr=sr, n_steps=np.random.uniform(-1.5, 1.5))
             
         return audio
+
+    def _apply_spec_augment(self, features, max_mask_pct=0.1):
+        """Randomly mask frequency and time strips (SpecAugment)."""
+        # This prevents the model from overfitting to specific spectral artifacts
+        c, t = features.shape
+        
+        # Time masking
+        if np.random.random() < 0.5:
+            t_mask = int(np.random.uniform(0, max_mask_pct) * t)
+            t0 = np.random.randint(0, t - t_mask)
+            features[:, t0:t0 + t_mask] = 0
+            
+        # Frequency masking
+        if np.random.random() < 0.5:
+            f_mask = int(np.random.uniform(0, max_mask_pct) * c)
+            f0 = np.random.randint(0, c - f_mask)
+            features[f0:f0 + f_mask, :] = 0
+            
+        return features
 
     def __getitem__(self, index):
         file_path = self.files[index]
@@ -57,9 +82,12 @@ class VoiceDataset(Dataset):
             audio, sr = librosa.load(file_path, sr=16000)
         except Exception as e:
             print(f"Error loading {file_path}: {e}")
-            # Fallback to a zero array if load fails
             audio = np.zeros(16000 * 5)
             sr = 16000
+
+        # Safety check for empty audio or very short audio
+        if len(audio) == 0:
+             audio = np.zeros(16000 * 5)
 
         # Apply augmentation ONLY for training data
         if self.augment:
@@ -125,6 +153,16 @@ class VoiceDataset(Dataset):
         centroid = pad_or_trim(centroid)
         bandwidth = pad_or_trim(bandwidth)
 
+        # 5. Channel Dropout (Randomly kill specific features to force learning others)
+        # Features map: 0-63 (Mel), 64-89 (MFCC), 90 (Pitch), 91-97 (Contrast), etc.
+        if self.augment:
+             if np.random.random() < 0.2:
+                 # Kill Pitch (Row 90)
+                 pitch_track[:] = 0
+             if np.random.random() < 0.2:
+                 # Kill ZCR (Row 110 approx - need strict indexing)
+                 zcr[:] = 0
+
         # Stack all features along channel dimension
         features = np.concatenate([
             mel,
@@ -136,6 +174,10 @@ class VoiceDataset(Dataset):
             centroid,
             bandwidth
         ], axis=0)  # shape: (113, MAX_LEN)
+
+        # Apply SpecAugment (feature-level masking) for training robustness
+        if self.augment:
+            features = self._apply_spec_augment(features, max_mask_pct=0.15)  # Increased mask pct
 
         features = torch.tensor(features, dtype=torch.float32).unsqueeze(0)
         features = features.squeeze(0)

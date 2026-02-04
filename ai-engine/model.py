@@ -25,6 +25,26 @@ class VoiceCNN(nn.Module):
         return self.network(x)
 
 # Residual block for ResNet-style architecture
+class SEBlock(nn.Module):
+    """Squeeze-and-Excitation Block for Channel Attention."""
+    def __init__(self, channel, reduction=16):
+        super().__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        reduction_channels = max(1, channel // reduction)
+        self.fc = nn.Sequential(
+            nn.Linear(channel, reduction_channels, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(reduction_channels, channel, bias=False),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        y = self.avg_pool(x).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+        return x * y.expand_as(x)
+
+# Residual block for ResNet-style architecture with SE Attention
 class BasicBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1, downsample=None):
         super().__init__()
@@ -33,6 +53,8 @@ class BasicBlock(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(out_channels)
+        # Add SE Block
+        self.se = SEBlock(out_channels)
         self.downsample = downsample
         self.dropout = nn.Dropout(0.3)
 
@@ -44,6 +66,9 @@ class BasicBlock(nn.Module):
         out = self.dropout(out)
         out = self.conv2(out)
         out = self.bn2(out)
+        # Apply SE Attention
+        out = self.se(out)
+        
         if self.downsample is not None:
             identity = self.downsample(x)
         out += identity
