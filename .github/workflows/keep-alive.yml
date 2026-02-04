@@ -1,0 +1,15 @@
+name: Keep Alive
+
+on:
+  schedule:
+    - cron: '*/11 * * * *' # Run every 11 minutes to prevent Render 15-min sleep
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping API
+        run: |
+          echo "Pinging https://ai-call-analyzer.onrender.com/ to keep it awake..."
+          curl -I https://ai-call-analyzer.onrender.com/
