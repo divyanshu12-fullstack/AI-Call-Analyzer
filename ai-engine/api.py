@@ -111,6 +111,7 @@ class DetectionResponse(BaseModel):
 
 
 @app.get("/")
+@app.head("/")
 def root():
     """Health check endpoint."""
     return {
