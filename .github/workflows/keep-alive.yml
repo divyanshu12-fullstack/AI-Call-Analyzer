@@ -2,7 +2,7 @@ name: Keep Alive
 
 on:
   schedule:
-    - cron: '*/11 * * * *' # Run every 11 minutes to prevent Render 15-min sleep
+    - cron: '*/5 * * * *' # Run every 5 minutes to be safe against provider delays
   workflow_dispatch: # Allow manual trigger
 
 jobs:
