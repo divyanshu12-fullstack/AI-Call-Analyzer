@@ -11,6 +11,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 from typing import Optional
 import os
+import sys
+
+# Add current directory to sys.path so 'inference' and 'model' can be imported
+# when running from the project root (as Render does)
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from inference import VoiceDetector
 
 # Load environment variables from .env file
