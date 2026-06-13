@@ -185,9 +185,7 @@ function Orb({ freeze }: { freeze: boolean }) {
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          count={particleCount}
-          array={positions}
-          itemSize={3}
+          args={[positions, 3]}
         />
       </bufferGeometry>
       <shaderMaterial

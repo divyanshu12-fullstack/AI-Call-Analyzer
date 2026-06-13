@@ -185,15 +185,11 @@ export function ParticleWaveform({ freeze, mode = 'processing' }: { freeze: bool
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          count={count}
-          array={pos}
-          itemSize={3}
+          args={[pos, 3]}
         />
         <bufferAttribute
           attach="attributes-uv"
-          count={count}
-          array={uvs}
-          itemSize={2}
+          args={[uvs, 2]}
         />
       </bufferGeometry>
       <shaderMaterial
