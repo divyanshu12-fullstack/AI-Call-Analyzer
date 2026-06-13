@@ -101,6 +101,13 @@ class AudioRequest(BaseModel):
     audioBase64: str  # Base64-encoded audio
 
 
+class DetectionMeta(BaseModel):
+    """Metadata detailing the inference segmentation breakdown."""
+    windows_analyzed: int
+    max_ai_prob: float
+    avg_ai_prob: float
+
+
 class DetectionResponse(BaseModel):
     """Response containing classification results."""
     status: str = "success"  # Always "success" for successful responses
@@ -108,6 +115,8 @@ class DetectionResponse(BaseModel):
     classification: str  # "AI_GENERATED" or "HUMAN"
     confidenceScore: float  # 0.0 to 1.0
     explanation: str  # Technical reasoning
+    meta: Optional[DetectionMeta] = None
+
 
 
 @app.get("/")

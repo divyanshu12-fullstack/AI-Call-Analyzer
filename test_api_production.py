@@ -56,7 +56,7 @@ if __name__ == "__main__":
         raise SystemExit("API_KEY env var is not set. Set API_KEY before running.")
 
     # Test with a sample file (replace with actual path)
-    test_audio_path = "data/test/human/human_0000.wav"  # Use an .mp3 file for compliance
+    test_audio_path = "ai-test.mp3"  # Use an .mp3 file for compliance
     if not test_audio_path.lower().endswith(".mp3"):
         raise SystemExit("Test audio must be .mp3 to match API compliance.")
 

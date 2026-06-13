@@ -1,0 +1,416 @@
+/* ═══════════════════════════════════════════════════════
+   VoxGuard AI — Global Design System
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Font Imports ── */
+@import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400,500,600,700,800&display=swap');
+
+/* ── Tailwind ── */
+@import "tailwindcss";
+
+/* ── Tailwind v4 Theme ── */
+@theme {
+  --color-void: #070A10;
+  --color-surface: #0D1117;
+  --color-glass: rgba(255, 255, 255, 0.04);
+  --color-border-subtle: rgba(255, 255, 255, 0.07);
+  --color-border-active: rgba(99, 179, 237, 0.4);
+
+  --color-accent-signal: #38BDF8;
+  --color-accent-wave: #818CF8;
+  --color-accent-pulse: #C084FC;
+
+  --color-state-human: #4ADE80;
+  --color-state-ai: #F87171;
+  --color-state-uncertain: #FB923C;
+
+  --color-text-primary: #F1F5F9;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #475569;
+}
+
+/* ── CSS Custom Properties ── */
+:root {
+  /* Backgrounds */
+  --bg-void: #070A10;
+  --bg-surface: #0D1117;
+  --bg-glass: rgba(255, 255, 255, 0.04);
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-active: rgba(99, 179, 237, 0.4);
+
+  /* Accent Colors */
+  --accent-signal: #38BDF8;
+  --accent-wave: #818CF8;
+  --accent-pulse: #C084FC;
+
+  /* State Colors */
+  --state-human: #4ADE80;
+  --state-ai: #F87171;
+  --state-uncertain: #FB923C;
+
+  /* Text */
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #475569;
+
+  /* Fonts */
+  --font-display: 'Cabinet Grotesk', var(--font-inter), sans-serif;
+  --font-body: var(--font-inter), 'Inter', sans-serif;
+  --font-mono: var(--font-jetbrains), 'JetBrains Mono', monospace;
+
+  /* Type Scale */
+  --text-hero: clamp(2.5rem, 6vw, 5rem);
+  --text-title: 1.75rem;
+  --text-label: 0.75rem;
+  --text-body: 1rem;
+  --text-mono-size: 0.875rem;
+}
+
+/* ── Base Reset ── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--bg-void);
+  background-image:
+    radial-gradient(ellipse 80% 40% at 50% 0%, rgba(56,189,248,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 30% at 80% 60%, rgba(129,140,248,0.03) 0%, transparent 50%),
+    radial-gradient(ellipse 50% 25% at 20% 85%, rgba(192,132,252,0.03) 0%, transparent 50%);
+  background-attachment: fixed;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-active);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-signal);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-active) var(--bg-surface);
+}
+
+/* ── Selection ── */
+::selection {
+  background: rgba(56, 189, 248, 0.2);
+  color: var(--text-primary);
+}
+
+/* ── Focus Styles ── */
+:focus-visible {
+  outline: 2px solid var(--accent-signal);
+  outline-offset: 2px;
+}
+
+/* ── Typography Utility Classes ── */
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-body {
+  font-family: var(--font-body);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.text-hero {
+  font-size: var(--text-hero);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.text-title {
+  font-size: var(--text-title);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.text-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-signal);
+}
+
+.text-body {
+  font-size: var(--text-body);
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.text-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-size);
+}
+
+/* ── Glassmorphic Panel ── */
+.glass-panel {
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+}
+
+/* ── Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Technical Term Highlight ── */
+mark.tech-term {
+  background: rgba(56, 189, 248, 0.1);
+  color: var(--accent-signal);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-style: normal;
+}
+
+/* ── Section Spacing ── */
+section {
+  padding-block: 80px;
+  padding-inline: 1.5rem;
+}
+
+.hero-section {
+  min-height: 100vh;
+  padding-block: 0;
+}
+
+/* ── Metrics Strip ── */
+.metrics-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 28px 48px;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(13, 17, 23, 0.6);
+  backdrop-filter: blur(12px);
+  position: relative;
+  z-index: 10;
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0 48px;
+}
+
+.metric-value {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.metric-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.metric-divider {
+  width: 1px;
+  height: 40px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+}
+
+/* ── Capability Card ── */
+.capability-card {
+  padding: 28px 24px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.capability-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--card-accent, var(--accent-signal));
+}
+
+.capability-card:hover {
+  border-color: var(--card-accent, var(--accent-signal));
+  transform: translateY(-2px);
+}
+
+/* ── Lexicon Item ── */
+.lexicon-item {
+  padding: 24px 28px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  position: relative;
+  cursor: default;
+  transition: background 0.2s;
+}
+
+.lexicon-item:hover {
+  background: rgba(56,189,248,0.04);
+}
+
+.lexicon-term {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--accent-signal);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lexicon-term::after {
+  content: '→';
+  opacity: 0;
+  transition: opacity 0.15s, transform 0.15s;
+  transform: translateX(-4px);
+  font-family: var(--font-body);
+}
+
+.lexicon-item:hover .lexicon-term::after {
+  opacity: 0.5;
+  transform: translateX(0);
+}
+
+.lexicon-definition {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+/* ── Site Footer ── */
+.site-footer {
+  border-top: 1px solid var(--border-subtle);
+  padding: 40px 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.footer-logo {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--text-primary);
+  letter-spacing: 0.05em;
+}
+
+.footer-tagline {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  display: block;
+  margin-top: 2px;
+}
+
+.footer-langs-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.footer-lang-strip {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.15em;
+}
+
+.footer-meta {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  .metrics-strip {
+    flex-direction: column;
+    padding: 24px;
+    gap: 16px;
+  }
+  .metric-divider {
+    width: 100%;
+    height: 1px;
+    margin: 8px 0;
+  }
+  .site-footer {
+    flex-direction: column;
+    text-align: center;
+    padding: 32px 24px;
+  }
+  .footer-meta {
+    justify-content: center;
+  }
+}
