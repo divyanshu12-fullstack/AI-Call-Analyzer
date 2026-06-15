@@ -98,7 +98,7 @@ export default function ConfidenceRing({ value, verdict }: ConfidenceRingProps) 
           <span
             style={{
               fontFamily: 'var(--font-mono)',
-              fontSize: 'var(--text-title)',
+              fontSize: '2.5rem',
               fontWeight: 700,
               color: 'var(--text-primary)',
               lineHeight: 1,
@@ -109,9 +109,9 @@ export default function ConfidenceRing({ value, verdict }: ConfidenceRingProps) 
           <span
             className="text-label"
             style={{
-              color: 'var(--text-muted)',
-              marginTop: '0.25rem',
-              fontSize: '0.65rem',
+              color: 'var(--text-secondary)',
+              marginTop: '0.4rem',
+              fontSize: '0.75rem',
             }}
           >
             CONFIDENCE

@@ -175,24 +175,6 @@ export default function ResultPage() {
 
           {/* Spectrogram footprint */}
           <SpectrogramScan verdict={isAi ? 'AI_GENERATED' : 'HUMAN'} />
-        </div>
-
-        {/* Right Column: Explanation, Diagnostics, Recommendations */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '2rem',
-          }}
-        >
-          {/* Analysis Explanation */}
-          <ExplanationPanel explanation={result.explanation} />
-
-          {/* Diagnostics Progress Bars */}
-          <ForensicDiagnostics
-            confidenceScore={normalizedConfidence}
-            verdict={isAi ? 'AI_GENERATED' : 'HUMAN'}
-          />
 
           {/* Forensic Recommendations Card */}
           <div
@@ -242,6 +224,25 @@ export default function ResultPage() {
                 : 'Acoustic metrics align with normal human speech production. No generative voice clone or splicing patterns detected. Continue with standard voice stream authorization.'}
             </p>
           </div>
+        </div>
+
+        {/* Right Column: Explanation, Diagnostics, Recommendations */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2rem',
+          }}
+        >
+          {/* Analysis Explanation */}
+          <ExplanationPanel explanation={result.explanation} />
+
+          {/* Diagnostics Progress Bars */}
+          <ForensicDiagnostics
+            confidenceScore={normalizedConfidence}
+            verdict={isAi ? 'AI_GENERATED' : 'HUMAN'}
+          />
+
         </div>
       </div>
 

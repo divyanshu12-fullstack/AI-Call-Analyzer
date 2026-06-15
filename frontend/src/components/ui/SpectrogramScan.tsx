@@ -71,7 +71,7 @@ export default function SpectrogramScan({ verdict }: SpectrogramScanProps) {
         <span
           className="text-label"
           style={{
-            fontSize: '0.65rem',
+            fontSize: '0.7rem',
             letterSpacing: '0.12em',
           }}
         >
@@ -80,7 +80,7 @@ export default function SpectrogramScan({ verdict }: SpectrogramScanProps) {
         <span
           style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: '0.6rem',
+            fontSize: '0.65rem',
             color,
             textTransform: 'uppercase',
             letterSpacing: '0.08em',
@@ -149,7 +149,7 @@ export default function SpectrogramScan({ verdict }: SpectrogramScanProps) {
           display: 'flex',
           justifyContent: 'space-between',
           fontFamily: 'var(--font-mono)',
-          fontSize: '0.55rem',
+          fontSize: '0.6rem',
           color: 'var(--text-muted)',
         }}
       >

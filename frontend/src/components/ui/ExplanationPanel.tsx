@@ -89,7 +89,7 @@ function InsightPoint({ children, index }: { children: ReactNode; index: number 
           color: 'var(--accent-signal)',
           borderRadius: '4px',
           fontFamily: 'var(--font-mono)',
-          fontSize: '0.65rem',
+          fontSize: '0.7rem',
           fontWeight: 700,
         }}
       >
@@ -98,7 +98,7 @@ function InsightPoint({ children, index }: { children: ReactNode; index: number 
       <p
         style={{
           fontFamily: 'var(--font-body)',
-          fontSize: '0.9rem',
+          fontSize: '0.95rem',
           color: 'var(--text-secondary)',
           lineHeight: 1.6,
           margin: 0,
@@ -159,7 +159,7 @@ export default function ExplanationPanel({ explanation }: ExplanationPanelProps)
             gridTemplateColumns: '1fr 1fr',
             gap: '0.75rem',
             fontFamily: 'var(--font-mono)',
-            fontSize: '0.7rem',
+            fontSize: '0.8rem',
             color: 'var(--text-secondary)',
           }}
         >

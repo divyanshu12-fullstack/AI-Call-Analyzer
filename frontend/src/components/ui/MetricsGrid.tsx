@@ -23,7 +23,7 @@ function MetricItem({ value, label }: MetricItemProps) {
       <div
         style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 'var(--text-title)',
+          fontSize: '2rem',
           fontWeight: 700,
           color: 'var(--text-primary)',
           lineHeight: 1.2,
@@ -35,8 +35,8 @@ function MetricItem({ value, label }: MetricItemProps) {
       <div
         className="text-label"
         style={{
-          color: 'var(--text-muted)',
-          fontSize: '0.65rem',
+          color: 'var(--text-secondary)',
+          fontSize: '0.7rem',
         }}
       >
         {label}

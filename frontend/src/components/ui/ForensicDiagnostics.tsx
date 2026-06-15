@@ -36,7 +36,7 @@ function DiagnosticBar({ label, sublabel, score, isAnomaly, statusText }: Diagno
           <span
             style={{
               fontFamily: 'var(--font-body)',
-              fontSize: '0.85rem',
+              fontSize: '0.95rem',
               fontWeight: 600,
               color: 'var(--text-primary)',
               display: 'block',
@@ -47,7 +47,7 @@ function DiagnosticBar({ label, sublabel, score, isAnomaly, statusText }: Diagno
           <span
             style={{
               fontFamily: 'var(--font-body)',
-              fontSize: '0.7rem',
+              fontSize: '0.8rem',
               color: 'var(--text-secondary)',
             }}
           >
@@ -58,7 +58,7 @@ function DiagnosticBar({ label, sublabel, score, isAnomaly, statusText }: Diagno
           <span
             style={{
               fontFamily: 'var(--font-mono)',
-              fontSize: '0.75rem',
+              fontSize: '0.8rem',
               fontWeight: 700,
               color: barColor,
               marginRight: '0.5rem',
@@ -69,7 +69,7 @@ function DiagnosticBar({ label, sublabel, score, isAnomaly, statusText }: Diagno
           <span
             style={{
               fontFamily: 'var(--font-mono)',
-              fontSize: '0.75rem',
+              fontSize: '0.8rem',
               color: 'var(--text-muted)',
             }}
           >
@@ -81,7 +81,7 @@ function DiagnosticBar({ label, sublabel, score, isAnomaly, statusText }: Diagno
       {/* Progress track */}
       <div
         style={{
-          height: '6px',
+          height: '8px',
           width: '100%',
           background: 'rgba(255, 255, 255, 0.03)',
           borderRadius: '3px',
