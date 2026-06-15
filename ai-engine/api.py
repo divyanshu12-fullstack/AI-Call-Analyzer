@@ -1,8 +1,8 @@
 """
 FastAPI server for AI Voice Detection.
-Exposes a POST /api/voice-detection end-point that accepts base64-encoded audio.
+Exposes a POST /api/voice-detection endpoint that accepts base64-encoded audio.
 """
-from fastapi import FastAPI, HTTPException, Header, Security, Depends, Request, File, UploadFile, Form
+from fastapi import FastAPI, HTTPException, Header, Security, Depends, Request
 from dotenv import load_dotenv
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +10,6 @@ from fastapi.security.api_key import APIKeyHeader
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 from typing import Optional
-import tempfile
 import os
 import sys
 
@@ -94,6 +93,13 @@ async def pydantic_validation_exception_handler(request: Request, exc: Validatio
     )
 
 
+class AudioRequest(BaseModel):
+    """Request body containing base64-encoded audio."""
+    # Primary fields per submission spec (required)
+    language: str  # Tamil, English, Hindi, Malayalam, Telugu
+    audioFormat: str  # mp3
+    audioBase64: str  # Base64-encoded audio
+
 
 class DetectionMeta(BaseModel):
     """Metadata detailing the inference segmentation breakdown."""
@@ -125,58 +131,45 @@ def root():
 
 
 @app.post("/api/voice-detection", response_model=DetectionResponse)
-async def detect_voice(
-    language: str = Form(...),
-    audioFormat: str = Form("mp3"),
-    file: UploadFile = File(...),
-    api_key: str = Depends(get_api_key)
-):
+def detect_voice(request: AudioRequest, api_key: str = Depends(get_api_key)):
     """
-    Detect if audio is AI-generated or human using multipart/form-data.
+    Detect if audio is AI-generated or human.
     
     - **language**: Must be one of: Tamil, English, Hindi, Malayalam, Telugu
     - **audioFormat**: Audio format (mp3)
-    - **file**: Binary audio file
-    """
-    print(f"Received request: language={language}, audioFormat={audioFormat}, file={file.filename}")
+    - **audioBase64**: Base64-encoded audio file
     
+    Returns classification, confidence score, and technical explanation.
+    """
+    # Log the request for debugging
+    print(f"Received request: language={request.language}, audioFormat={request.audioFormat}, audioBase64 length={len(request.audioBase64) if request.audioBase64 else 0}")
+    
+    # Supported languages per submission spec
     SUPPORTED_LANGUAGES = ["Tamil", "English", "Hindi", "Malayalam", "Telugu"]
     
     try:
-        if language not in SUPPORTED_LANGUAGES:
+        # Validate language
+        if request.language not in SUPPORTED_LANGUAGES:
             raise HTTPException(
                 status_code=400, 
                 detail=f"Unsupported language. Must be one of: {', '.join(SUPPORTED_LANGUAGES)}"
             )
         
-        if audioFormat.lower() != "mp3":
+        # Validate audio format
+        if request.audioFormat.lower() != "mp3":
             raise HTTPException(
                 status_code=400,
                 detail="Only MP3 format is supported"
             )
         
-        audio_bytes = await file.read()
-        if not audio_bytes:
-            raise HTTPException(status_code=400, detail="Empty audio file")
-
-        # Basic format check
-        if not detector._is_mp3_bytes(audio_bytes):
-            raise HTTPException(status_code=400, detail="Only MP3 audio is supported")
-
-        # Save to temp file and process
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-            f.write(audio_bytes)
-            temp_path = f.name
-            
-        try:
-            result = detector.predict_from_file(temp_path)
-        finally:
-            import os
-            os.unlink(temp_path)
+        # Process request using base64 audio
+        result = detector.predict_from_base64(request.audioBase64)
         
+        # Add required fields to response
         result['status'] = 'success'
-        result['language'] = language
+        result['language'] = request.language
         
+        # Rename confidence to confidenceScore if needed
         if 'confidence' in result:
             result['confidenceScore'] = result.pop('confidence')
             

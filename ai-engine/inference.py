@@ -37,8 +37,10 @@ class VoiceDetector:
             except Exception as e:
                 print(f"Warning: Could not load calibration: {e}")
         
-    def _compute_all_features(self, audio, sr):
-        """Compute all 8 features for the given audio array."""
+    def _extract_features(self, audio_path):
+        """Extract all audio features and concatenate them."""
+        audio, sr = librosa.load(audio_path, sr=16000)
+
         # Mel spectrogram
         mel = librosa.feature.melspectrogram(y=audio, sr=sr, n_mels=64)
         mel = librosa.power_to_db(mel)
@@ -50,9 +52,9 @@ class VoiceDetector:
         mfcc = np.concatenate([mfcc, mfcc_delta], axis=0)  # shape: (26, T)
         mfcc = (mfcc - mfcc.mean()) / (mfcc.std() + 1e-6)
 
-        # Pitch (F0) using pyin for speed
-        f0, _, _ = librosa.pyin(y=audio, sr=sr, fmin=50, fmax=500)
-        pitch_track = np.nan_to_num(f0)
+        # Pitch (F0)
+        pitches, magnitudes = librosa.piptrack(y=audio, sr=sr)
+        pitch_track = pitches.max(axis=0)
         pitch_track = np.expand_dims(pitch_track, axis=0)  # (1, T)
         pitch_track = (pitch_track - pitch_track.mean()) / (pitch_track.std() + 1e-6)
 
@@ -74,38 +76,36 @@ class VoiceDetector:
         centroid = (centroid - centroid.mean()) / (centroid.std() + 1e-6)
         bandwidth = (bandwidth - bandwidth.mean()) / (bandwidth.std() + 1e-6)
 
-        # Ensure all features have the exact same number of frames
-        min_len = min(
-            mel.shape[1], mfcc.shape[1], pitch_track.shape[1],
-            contrast.shape[1], chroma.shape[1], zcr.shape[1],
-            centroid.shape[1], bandwidth.shape[1]
-        )
-        
-        features = np.concatenate([
-            mel[:, :min_len],
-            mfcc[:, :min_len],
-            pitch_track[:, :min_len],
-            contrast[:, :min_len],
-            chroma[:, :min_len],
-            zcr[:, :min_len],
-            centroid[:, :min_len],
-            bandwidth[:, :min_len]
-        ], axis=0)  # shape: (113, min_len)
-        
-        return features
+        # Pad or trim all features to MAX_LEN frames
+        def pad_or_trim(feat, max_len=MAX_LEN):
+            if feat.shape[1] < max_len:
+                pad_width = max_len - feat.shape[1]
+                feat = np.pad(feat, ((0, 0), (0, pad_width)), mode='constant')
+            else:
+                feat = feat[:, :max_len]
+            return feat
 
-    def _extract_features(self, audio_path):
-        """Extract all audio features and concatenate them (padded to MAX_LEN)."""
-        audio, sr = librosa.load(audio_path, sr=16000)
-        features = self._compute_all_features(audio, sr)
-        
-        # Pad or trim to MAX_LEN
-        if features.shape[1] < MAX_LEN:
-            pad_width = MAX_LEN - features.shape[1]
-            features = np.pad(features, ((0, 0), (0, pad_width)), mode='constant')
-        else:
-            features = features[:, :MAX_LEN]
-            
+        mel = pad_or_trim(mel)
+        mfcc = pad_or_trim(mfcc)
+        pitch_track = pad_or_trim(pitch_track)
+        contrast = pad_or_trim(contrast)
+        chroma = pad_or_trim(chroma)
+        zcr = pad_or_trim(zcr)
+        centroid = pad_or_trim(centroid)
+        bandwidth = pad_or_trim(bandwidth)
+
+        # Stack all features along channel dimension
+        features = np.concatenate([
+            mel,
+            mfcc,
+            pitch_track,
+            contrast,
+            chroma,
+            zcr,
+            centroid,
+            bandwidth
+        ], axis=0)  # shape: (113, MAX_LEN)
+
         return features
     
     def _apply_calibration(self, prob):
@@ -151,35 +151,85 @@ class VoiceDetector:
             return explanations[0.0]
     
     def _extract_windows(self, audio_path, window_sec=5.0, stride_sec=2.5):
-        """Extract multiple 5-second feature windows from long audio efficiently."""
+        """Extract multiple 5-second feature windows from long audio."""
         audio, sr = librosa.load(audio_path, sr=16000)
+        duration = len(audio) / sr
         
-        features = self._compute_all_features(audio, sr)
-        total_frames = features.shape[1]
-        
-        # Approximate frame conversions (librosa default hop_length=512)
-        hop_length = 512
-        stride_frames = int((stride_sec * sr) / hop_length)
+        # Calculate samples per window and stride
+        window_size = int(window_sec * sr)
+        stride_size = int(stride_sec * sr)
         
         windows = []
         
-        if total_frames < MAX_LEN:
-            # Pad and take one
-            pad_width = MAX_LEN - total_frames
-            feat = np.pad(features, ((0, 0), (0, pad_width)), mode='constant')
-            windows.append(feat)
+        # If shorter than window, just pad and take one
+        if len(audio) < window_size:
+            windows.append(self._process_segment(audio, sr))
         else:
-            # Sliding window over the features array
-            for start in range(0, total_frames - MAX_LEN + 1, stride_frames):
-                segment = features[:, start : start + MAX_LEN]
-                windows.append(segment)
+            # Sliding window
+            for start in range(0, len(audio) - window_size + 1, stride_size):
+                segment = audio[start : start + window_size]
+                windows.append(self._process_segment(segment, sr))
             
-            # Ensure we don't miss tail end
-            if (total_frames - MAX_LEN) % stride_frames > (MAX_LEN // 2):
-                segment = features[:, -MAX_LEN:]
-                windows.append(segment)
+            # Ensure we don't miss the tail end if it's significant (> 1 sec)
+            if len(audio) % stride_size > sr:
+                segment = audio[-window_size:]
+                windows.append(self._process_segment(segment, sr))
 
         return np.array(windows)
+
+    def _process_segment(self, audio, sr):
+        """Extract features for a specific audio segment."""
+        # Mel spectrogram
+        mel = librosa.feature.melspectrogram(y=audio, sr=sr, n_mels=64)
+        mel = librosa.power_to_db(mel)
+        mel = (mel - mel.mean()) / (mel.std() + 1e-6)
+
+        # MFCCs (13 coefficients + deltas)
+        mfcc = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13)
+        mfcc_delta = librosa.feature.delta(mfcc)
+        mfcc = np.concatenate([mfcc, mfcc_delta], axis=0)
+        mfcc = (mfcc - mfcc.mean()) / (mfcc.std() + 1e-6)
+
+        # Pitch (F0)
+        pitches, magnitudes = librosa.piptrack(y=audio, sr=sr)
+        pitch_track = pitches.max(axis=0)
+        pitch_track = np.expand_dims(pitch_track, axis=0)
+        pitch_track = (pitch_track - pitch_track.mean()) / (pitch_track.std() + 1e-6)
+
+        # Spectral contrast
+        contrast = librosa.feature.spectral_contrast(y=audio, sr=sr)
+        contrast = (contrast - contrast.mean()) / (contrast.std() + 1e-6)
+
+        # Chroma
+        chroma = librosa.feature.chroma_stft(y=audio, sr=sr)
+        chroma = (chroma - chroma.mean()) / (chroma.std() + 1e-6)
+
+        # Zero-crossing rate
+        zcr = librosa.feature.zero_crossing_rate(y=audio)
+        zcr = (zcr - zcr.mean()) / (zcr.std() + 1e-6)
+
+        # Spectral centroid and bandwidth
+        centroid = librosa.feature.spectral_centroid(y=audio, sr=sr)
+        bandwidth = librosa.feature.spectral_bandwidth(y=audio, sr=sr)
+        centroid = (centroid - centroid.mean()) / (centroid.std() + 1e-6)
+        bandwidth = (bandwidth - bandwidth.mean()) / (bandwidth.std() + 1e-6)
+
+        # Pad or trim
+        def pad_or_trim(feat, max_len=MAX_LEN):
+            if feat.shape[1] < max_len:
+                pad_width = max_len - feat.shape[1]
+                feat = np.pad(feat, ((0, 0), (0, pad_width)), mode='constant')
+            else:
+                feat = feat[:, :max_len]
+            return feat
+
+        features = np.concatenate([
+            pad_or_trim(mel), pad_or_trim(mfcc), pad_or_trim(pitch_track),
+            pad_or_trim(contrast), pad_or_trim(chroma), pad_or_trim(zcr),
+            pad_or_trim(centroid), pad_or_trim(bandwidth)
+        ], axis=0)
+        
+        return features
 
     def predict_from_file(self, audio_path):
         """Predict using a sliding window to handle long dialogues."""
