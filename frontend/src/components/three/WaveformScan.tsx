@@ -301,7 +301,7 @@ export default function WaveformScan() {
         top: '32px',
         left: '48px',
         fontFamily: 'var(--font-mono)',
-        fontSize: '0.65rem',
+        fontSize: '0.75rem',
         fontWeight: 600,
         letterSpacing: '0.1em',
         textTransform: 'uppercase',
@@ -327,11 +327,16 @@ export default function WaveformScan() {
       }}>
         <div style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 'var(--text-mono-size)',
-          color: 'var(--accent-signal)',
-          letterSpacing: '0.08em',
+          fontSize: '1.1rem',
+          color: '#F1F5F9',
+          fontWeight: 700,
+          letterSpacing: '0.1em',
           minHeight: '1.5em',
           marginBottom: '0.75rem',
+          textShadow: '0 0 20px rgba(56, 189, 248, 0.6), 0 0 40px rgba(56, 189, 248, 0.3), 0 2px 8px rgba(0,0,0,0.8)',
+          padding: '0.5rem 1.5rem',
+          borderRadius: '8px',
+          background: 'rgba(7, 10, 16, 0.6)',
         }}>
           {STATUS_MESSAGES[statusIndex]}
         </div>

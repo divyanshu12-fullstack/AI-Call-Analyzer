@@ -12,6 +12,7 @@ import {
   Activity,
   BookOpen,
   ChevronRight,
+  AudioWaveform,
   type LucideIcon,
 } from 'lucide-react';
 import Navbar from '@/components/ui/Navbar';
@@ -133,6 +134,9 @@ export default function HomePage() {
             zIndex: 1,
             textAlign: 'center',
             maxWidth: '900px',
+            padding: '2rem 1.5rem',
+            borderRadius: '24px',
+            background: 'radial-gradient(ellipse 80% 80% at 50% 50%, rgba(7,10,16,0.65) 0%, rgba(7,10,16,0.3) 60%, transparent 100%)',
           }}
         >
           <span
@@ -162,6 +166,7 @@ export default function HomePage() {
               letterSpacing: '-0.02em',
               lineHeight: 1.1,
               wordBreak: 'break-word',
+              textShadow: '0 2px 20px rgba(0,0,0,0.7), 0 0 40px rgba(0,0,0,0.5)',
             }}
           >
             Expose Synthetic Voices.
@@ -173,14 +178,15 @@ export default function HomePage() {
             style={{
               fontFamily: 'var(--font-body)',
               fontSize: '1.125rem',
-              color: 'var(--text-secondary)',
+              color: 'rgba(203, 213, 225, 0.95)',
               marginBottom: '2.5rem',
               lineHeight: 1.7,
               maxWidth: '700px',
               margin: '0 auto 2.5rem',
+              textShadow: '0 1px 12px rgba(0,0,0,0.8), 0 0 30px rgba(0,0,0,0.5)',
             }}
           >
-            VoxGuard AI is a forensic-grade platform engineered to detect cloned voices, deepfake speech, and generative AI calls. Utilizing state-of-the-art <strong>SE-VoiceResNet-18</strong> networks and 11-channel acoustic profiling, we reveal anomalies invisible to the human ear.
+            VoxGuard AI is a forensic-grade platform engineered to detect cloned voices, deepfake speech, and generative AI calls. Utilizing state-of-the-art <strong style={{ color: 'var(--accent-signal)' }}>SE-VoiceResNet-18</strong> networks and 11-channel acoustic profiling, we reveal anomalies invisible to the human ear.
           </p>
 
           <div
@@ -193,35 +199,11 @@ export default function HomePage() {
           >
             <Link
               href="/analyze"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                padding: '14px 36px',
-                borderRadius: '100px',
-                border: '1px solid var(--accent-signal)',
-                background: 'linear-gradient(135deg, var(--accent-signal), var(--accent-wave))',
-                color: '#070A10',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.875rem',
-                fontWeight: 700,
-                letterSpacing: '0.06em',
-                textDecoration: 'none',
-                transition: 'all 0.2s ease',
-                cursor: 'pointer',
-                minHeight: '52px',
-                boxShadow: '0 4px 20px rgba(56, 189, 248, 0.25)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.filter = 'brightness(1.1)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.filter = 'none';
-                e.currentTarget.style.transform = 'none';
-              }}
+              className="hero-cta-btn"
             >
-              Start Forensic Scan
+              <span className="hero-cta-shimmer" />
+              <AudioWaveform size={18} strokeWidth={2.2} />
+              <span>Start Forensic Scan</span>
               <ChevronRight size={16} />
             </Link>
           </div>
@@ -519,21 +501,108 @@ export default function HomePage() {
         </div>
         <div className="footer-meta">
           <span>SE-VoiceResNet-18 Engine</span>
-          <span>·</span>
-          <span>Temperature Calibrated</span>
         </div>
       </footer>
 
       {/* Responsive layout corrections */}
       <style>{`
+        /* ── Hero CTA Button ── */
+        .hero-cta-btn {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.6rem;
+          padding: 16px 40px;
+          border-radius: 100px;
+          border: none;
+          background: linear-gradient(135deg, #38BDF8 0%, #818CF8 50%, #C084FC 100%);
+          color: #070A10;
+          font-family: var(--font-mono);
+          font-size: 0.875rem;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-decoration: none;
+          cursor: pointer;
+          min-height: 54px;
+          overflow: hidden;
+          isolation: isolate;
+          transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+          box-shadow:
+            0 0 20px rgba(56, 189, 248, 0.3),
+            0 0 60px rgba(56, 189, 248, 0.1),
+            0 4px 16px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.2);
+          animation: hero-cta-pulse 3s ease-in-out infinite;
+        }
+
+        .hero-cta-btn:hover {
+          transform: translateY(-2px) scale(1.03);
+          box-shadow:
+            0 0 30px rgba(56, 189, 248, 0.45),
+            0 0 80px rgba(129, 140, 248, 0.2),
+            0 8px 32px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.25);
+        }
+
+        .hero-cta-btn:active {
+          transform: translateY(0px) scale(0.98);
+        }
+
+        /* Shimmer sweep effect */
+        .hero-cta-shimmer {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            105deg,
+            transparent 35%,
+            rgba(255, 255, 255, 0.25) 45%,
+            rgba(255, 255, 255, 0.35) 50%,
+            rgba(255, 255, 255, 0.25) 55%,
+            transparent 65%
+          );
+          transform: translateX(-100%);
+          animation: hero-shimmer 4s ease-in-out infinite;
+          z-index: -1;
+        }
+
+        @keyframes hero-shimmer {
+          0%, 100% { transform: translateX(-100%); }
+          50% { transform: translateX(100%); }
+        }
+
+        @keyframes hero-cta-pulse {
+          0%, 100% { box-shadow: 0 0 20px rgba(56, 189, 248, 0.3), 0 0 60px rgba(56, 189, 248, 0.1), 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2); }
+          50% { box-shadow: 0 0 28px rgba(56, 189, 248, 0.4), 0 0 80px rgba(129, 140, 248, 0.15), 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2); }
+        }
+
         @media (max-width: 768px) {
           .responsive-feature-grid {
             grid-template-columns: 1fr !important;
             gap: 2rem !important;
+            padding: 0 0.5rem !important;
           }
           .responsive-stats-grid {
             grid-template-columns: 1fr !important;
             gap: 1rem !important;
+          }
+          .text-hero {
+            font-size: clamp(2rem, 8vw, 3.5rem) !important;
+          }
+          .hero-cta-btn {
+            padding: 14px 32px;
+            font-size: 0.8rem;
+            min-height: 50px;
+            gap: 0.5rem;
+          }
+        }
+        @media (max-width: 480px) {
+          .text-hero {
+            font-size: clamp(1.75rem, 7vw, 2.5rem) !important;
+          }
+          .hero-cta-btn {
+            padding: 13px 28px;
+            font-size: 0.75rem;
+            min-height: 46px;
           }
         }
       `}</style>

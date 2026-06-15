@@ -251,7 +251,10 @@ export default function AudioOrb() {
           inset: 0,
           pointerEvents: 'none',
           zIndex: 1,
-          background: 'radial-gradient(ellipse 70% 70% at 50% 50%, transparent 55%, #070A10 90%)',
+          background: `
+            radial-gradient(ellipse 70% 70% at 50% 50%, transparent 40%, rgba(7,10,16,0.4) 60%, #070A10 85%),
+            linear-gradient(to bottom, rgba(7,10,16,0.3) 0%, transparent 20%, transparent 80%, rgba(7,10,16,0.5) 100%)
+          `,
         }}
       />
     </div>
