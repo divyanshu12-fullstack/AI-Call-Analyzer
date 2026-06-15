@@ -22,20 +22,21 @@ export interface AnalysisError {
 }
 
 export async function analyzeAudio(
-  audioBase64: string,
+  file: File,
   language: string,
   audioFormat: string = 'mp3'
 ): Promise<AnalysisResponse> {
+  const formData = new FormData();
+  formData.append('language', language);
+  formData.append('audioFormat', audioFormat);
+  formData.append('file', file);
+
   const response = await axios.post<AnalysisResponse>(
     `${BASE_URL}/api/voice-detection`,
-    {
-      language,
-      audioFormat,
-      audioBase64,
-    },
+    formData,
     {
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'multipart/form-data',
         ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
       },
       timeout: 120000, // 2 minute timeout for long audio files

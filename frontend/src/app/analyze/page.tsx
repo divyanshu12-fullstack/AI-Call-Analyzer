@@ -7,7 +7,7 @@ import { ArrowLeft, Terminal, Activity } from 'lucide-react';
 import Link from 'next/link';
 import { useVoxStore } from '@/lib/store';
 import { analyzeAudio } from '@/lib/api';
-import { fileToBase64, getAudioFormat } from '@/lib/audioUtils';
+import { getAudioFormat } from '@/lib/audioUtils';
 import FileDropzone from '@/components/ui/FileDropzone';
 import LanguageSelector from '@/components/ui/LanguageSelector';
 
@@ -92,9 +92,8 @@ export default function AnalyzePage() {
     }, 400); // Add a new log every 400ms
 
     try {
-      const base64 = await fileToBase64(file);
       const format = getAudioFormat(file);
-      const result = await analyzeAudio(base64, language, format);
+      const result = await analyzeAudio(file, language, format);
       
       clearInterval(logInterval);
       setResult(result);
