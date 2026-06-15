@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { ArrowLeft, Terminal, Activity } from 'lucide-react';
 import Link from 'next/link';
 import { useVoxStore } from '@/lib/store';
-import { analyzeAudio } from '@/lib/api';
+import { analyzeAudio, prewarmBackend } from '@/lib/api';
 import { fileToBase64, getAudioFormat } from '@/lib/audioUtils';
 import FileDropzone from '@/components/ui/FileDropzone';
 import LanguageSelector from '@/components/ui/LanguageSelector';
@@ -64,6 +64,11 @@ export default function AnalyzePage() {
   } = useVoxStore();
 
   const [scanLogs, setScanLogs] = useState<string[]>([]);
+
+  // Pre-warm the backend so Render wakes up before user uploads
+  useEffect(() => {
+    prewarmBackend();
+  }, []);
 
   const handleAnalyze = async () => {
     if (!file) return;

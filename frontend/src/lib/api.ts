@@ -21,6 +21,19 @@ export interface AnalysisError {
   message: string;
 }
 
+/**
+ * Pre-warm the backend by pinging the health endpoint.
+ * Call this early (e.g. on app load) so Render wakes up
+ * before the user uploads audio.
+ */
+export async function prewarmBackend(): Promise<void> {
+  try {
+    await axios.head(BASE_URL, { timeout: 10000 });
+  } catch {
+    // Swallow errors — pre-warm is best-effort
+  }
+}
+
 export async function analyzeAudio(
   audioBase64: string,
   language: string,
@@ -38,7 +51,7 @@ export async function analyzeAudio(
         'Content-Type': 'application/json',
         ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
       },
-      timeout: 120000, // 2 minute timeout for long audio files
+      timeout: 180000, // 3 minute timeout — safety margin for cold starts
     }
   );
 

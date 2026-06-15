@@ -2,6 +2,8 @@
 Inference module for Voice Detection.
 Loads trained model and processes audio for prediction.
 Supports confidence calibration via temperature scaling.
+
+OPTIMIZED: Compute-once feature extraction + pyin pitch tracking.
 """
 import torch
 import librosa
@@ -9,10 +11,14 @@ import numpy as np
 import base64
 import tempfile
 import os
+import gc
+import time
 from model import VoiceResNet
 
 # Constants
 MAX_LEN = 157  # Must match dataset.py
+MAX_AUDIO_SEC = 60  # Truncate audio longer than this to save memory
+MAX_WINDOWS = 6  # Cap sliding windows to limit memory and compute
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "models", "voice_model_best.pth")
 CALIBRATION_PATH = os.path.join(BASE_DIR, "models", "calibration.pth")
@@ -36,82 +42,22 @@ class VoiceDetector:
                 print(f"Loaded calibration temperature: {self.temperature:.4f}")
             except Exception as e:
                 print(f"Warning: Could not load calibration: {e}")
-        
-    def _extract_features(self, audio_path):
-        """Extract all audio features and concatenate them."""
-        audio, sr = librosa.load(audio_path, sr=16000)
 
-        # Mel spectrogram
-        mel = librosa.feature.melspectrogram(y=audio, sr=sr, n_mels=64)
-        mel = librosa.power_to_db(mel)
-        mel = (mel - mel.mean()) / (mel.std() + 1e-6)
+    # ── Shared helpers ──────────────────────────────────────────────
 
-        # MFCCs (13 coefficients + deltas)
-        mfcc = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13)
-        mfcc_delta = librosa.feature.delta(mfcc)
-        mfcc = np.concatenate([mfcc, mfcc_delta], axis=0)  # shape: (26, T)
-        mfcc = (mfcc - mfcc.mean()) / (mfcc.std() + 1e-6)
+    @staticmethod
+    def _pad_or_trim(feat, max_len=MAX_LEN):
+        """Pad or trim a feature matrix to exactly max_len frames."""
+        if feat.shape[1] < max_len:
+            pad_width = max_len - feat.shape[1]
+            feat = np.pad(feat, ((0, 0), (0, pad_width)), mode='constant')
+        else:
+            feat = feat[:, :max_len]
+        return feat
 
-        # Pitch (F0)
-        pitches, magnitudes = librosa.piptrack(y=audio, sr=sr)
-        pitch_track = pitches.max(axis=0)
-        pitch_track = np.expand_dims(pitch_track, axis=0)  # (1, T)
-        pitch_track = (pitch_track - pitch_track.mean()) / (pitch_track.std() + 1e-6)
-
-        # Spectral contrast
-        contrast = librosa.feature.spectral_contrast(y=audio, sr=sr)
-        contrast = (contrast - contrast.mean()) / (contrast.std() + 1e-6)
-
-        # Chroma
-        chroma = librosa.feature.chroma_stft(y=audio, sr=sr)
-        chroma = (chroma - chroma.mean()) / (chroma.std() + 1e-6)
-
-        # Zero-crossing rate
-        zcr = librosa.feature.zero_crossing_rate(y=audio)
-        zcr = (zcr - zcr.mean()) / (zcr.std() + 1e-6)
-
-        # Spectral centroid and bandwidth
-        centroid = librosa.feature.spectral_centroid(y=audio, sr=sr)
-        bandwidth = librosa.feature.spectral_bandwidth(y=audio, sr=sr)
-        centroid = (centroid - centroid.mean()) / (centroid.std() + 1e-6)
-        bandwidth = (bandwidth - bandwidth.mean()) / (bandwidth.std() + 1e-6)
-
-        # Pad or trim all features to MAX_LEN frames
-        def pad_or_trim(feat, max_len=MAX_LEN):
-            if feat.shape[1] < max_len:
-                pad_width = max_len - feat.shape[1]
-                feat = np.pad(feat, ((0, 0), (0, pad_width)), mode='constant')
-            else:
-                feat = feat[:, :max_len]
-            return feat
-
-        mel = pad_or_trim(mel)
-        mfcc = pad_or_trim(mfcc)
-        pitch_track = pad_or_trim(pitch_track)
-        contrast = pad_or_trim(contrast)
-        chroma = pad_or_trim(chroma)
-        zcr = pad_or_trim(zcr)
-        centroid = pad_or_trim(centroid)
-        bandwidth = pad_or_trim(bandwidth)
-
-        # Stack all features along channel dimension
-        features = np.concatenate([
-            mel,
-            mfcc,
-            pitch_track,
-            contrast,
-            chroma,
-            zcr,
-            centroid,
-            bandwidth
-        ], axis=0)  # shape: (113, MAX_LEN)
-
-        return features
-    
     def _apply_calibration(self, prob):
         """Apply temperature scaling calibration to raw probability."""
         if self.temperature != 1.0:
-            # Convert probability to logit-like space, apply temperature, convert back
             logit = np.log(prob / (1 - prob + 1e-10) + 1e-10)
             calibrated_logit = logit / self.temperature
             prob = 1.0 / (1.0 + np.exp(-calibrated_logit))
@@ -122,7 +68,6 @@ class VoiceDetector:
         Generate a detailed technical explanation for the prediction.
         Includes confidence level and specific artifacts detected.
         """
-        confidence_level = "very high" if confidence > 0.9 else "high" if confidence > 0.75 else "moderate" if confidence > 0.6 else "low"
         calibration_note = " (confidence calibrated)" if calibrated and self.temperature != 1.0 else ""
         
         if is_ai:
@@ -140,7 +85,6 @@ class VoiceDetector:
                 0.0: f"Low confidence ({confidence:.2%}) - Some human characteristics present but confidence is borderline. Audio may be heavily processed human or realistic AI-generated speech.{calibration_note}"
             }
         
-        # Select explanation based on confidence threshold
         if confidence > 0.9:
             return explanations[0.9]
         elif confidence > 0.75:
@@ -149,109 +93,167 @@ class VoiceDetector:
             return explanations[0.6]
         else:
             return explanations[0.0]
-    
-    def _extract_windows(self, audio_path, window_sec=5.0, stride_sec=2.5):
-        """Extract multiple 5-second feature windows from long audio."""
-        audio, sr = librosa.load(audio_path, sr=16000)
-        duration = len(audio) / sr
-        
-        # Calculate samples per window and stride
-        window_size = int(window_sec * sr)
-        stride_size = int(stride_sec * sr)
-        
-        windows = []
-        
-        # If shorter than window, just pad and take one
-        if len(audio) < window_size:
-            windows.append(self._process_segment(audio, sr))
-        else:
-            # Sliding window
-            for start in range(0, len(audio) - window_size + 1, stride_size):
-                segment = audio[start : start + window_size]
-                windows.append(self._process_segment(segment, sr))
-            
-            # Ensure we don't miss the tail end if it's significant (> 1 sec)
-            if len(audio) % stride_size > sr:
-                segment = audio[-window_size:]
-                windows.append(self._process_segment(segment, sr))
 
-        return np.array(windows)
+    # ── Optimized feature extraction ────────────────────────────────
 
-    def _process_segment(self, audio, sr):
-        """Extract features for a specific audio segment."""
-        # Mel spectrogram
+    def _extract_full_features(self, audio, sr):
+        """
+        Extract all 8 feature types from the FULL audio signal at once.
+        Returns a (113, T) feature matrix where T is the natural frame count.
+        
+        This is the key optimization: compute once on full audio,
+        then slice into windows from the resulting matrix.
+        """
+        t0 = time.time()
+
+        # Mel spectrogram (64 bins)
         mel = librosa.feature.melspectrogram(y=audio, sr=sr, n_mels=64)
         mel = librosa.power_to_db(mel)
         mel = (mel - mel.mean()) / (mel.std() + 1e-6)
 
-        # MFCCs (13 coefficients + deltas)
+        # MFCCs (13 coefficients + 13 deltas = 26 channels)
         mfcc = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13)
         mfcc_delta = librosa.feature.delta(mfcc)
         mfcc = np.concatenate([mfcc, mfcc_delta], axis=0)
         mfcc = (mfcc - mfcc.mean()) / (mfcc.std() + 1e-6)
 
-        # Pitch (F0)
-        pitches, magnitudes = librosa.piptrack(y=audio, sr=sr)
-        pitch_track = pitches.max(axis=0)
-        pitch_track = np.expand_dims(pitch_track, axis=0)
-        pitch_track = (pitch_track - pitch_track.mean()) / (pitch_track.std() + 1e-6)
+        # Pitch (F0) via pyin — MUCH faster than piptrack
+        # pyin returns (f0, voiced_flag, voiced_probs) where f0 is 1D
+        try:
+            f0, voiced_flag, voiced_probs = librosa.pyin(
+                y=audio, sr=sr, fmin=50, fmax=500,
+                frame_length=2048, hop_length=512
+            )
+            pitch_track = np.nan_to_num(f0, nan=0.0)
+            pitch_track = np.expand_dims(pitch_track, axis=0)  # (1, T)
+            # Align frame count with mel (pyin may differ by ±1 frame)
+            target_t = mel.shape[1]
+            if pitch_track.shape[1] < target_t:
+                pitch_track = np.pad(pitch_track, ((0, 0), (0, target_t - pitch_track.shape[1])))
+            else:
+                pitch_track = pitch_track[:, :target_t]
+            pitch_track = (pitch_track - pitch_track.mean()) / (pitch_track.std() + 1e-6)
+        except Exception:
+            pitch_track = np.zeros((1, mel.shape[1]))
 
-        # Spectral contrast
+        # Spectral contrast (7 bands)
         contrast = librosa.feature.spectral_contrast(y=audio, sr=sr)
         contrast = (contrast - contrast.mean()) / (contrast.std() + 1e-6)
 
-        # Chroma
+        # Chroma STFT (12 bins)
         chroma = librosa.feature.chroma_stft(y=audio, sr=sr)
         chroma = (chroma - chroma.mean()) / (chroma.std() + 1e-6)
 
-        # Zero-crossing rate
+        # Zero-crossing rate (1 channel)
         zcr = librosa.feature.zero_crossing_rate(y=audio)
         zcr = (zcr - zcr.mean()) / (zcr.std() + 1e-6)
 
-        # Spectral centroid and bandwidth
+        # Spectral centroid (1 channel)
         centroid = librosa.feature.spectral_centroid(y=audio, sr=sr)
-        bandwidth = librosa.feature.spectral_bandwidth(y=audio, sr=sr)
         centroid = (centroid - centroid.mean()) / (centroid.std() + 1e-6)
+
+        # Spectral bandwidth (1 channel)
+        bandwidth = librosa.feature.spectral_bandwidth(y=audio, sr=sr)
         bandwidth = (bandwidth - bandwidth.mean()) / (bandwidth.std() + 1e-6)
 
-        # Pad or trim
-        def pad_or_trim(feat, max_len=MAX_LEN):
-            if feat.shape[1] < max_len:
-                pad_width = max_len - feat.shape[1]
-                feat = np.pad(feat, ((0, 0), (0, pad_width)), mode='constant')
-            else:
-                feat = feat[:, :max_len]
-            return feat
+        # Align all features to the same frame count (mel is the reference)
+        target_t = mel.shape[1]
+        def align(feat):
+            if feat.shape[1] < target_t:
+                return np.pad(feat, ((0, 0), (0, target_t - feat.shape[1])))
+            return feat[:, :target_t]
 
         features = np.concatenate([
-            pad_or_trim(mel), pad_or_trim(mfcc), pad_or_trim(pitch_track),
-            pad_or_trim(contrast), pad_or_trim(chroma), pad_or_trim(zcr),
-            pad_or_trim(centroid), pad_or_trim(bandwidth)
-        ], axis=0)
-        
-        return features
+            mel,                    # 64 channels
+            align(mfcc),            # 26 channels
+            align(pitch_track),     #  1 channel
+            align(contrast),        #  7 channels
+            align(chroma),          # 12 channels
+            align(zcr),             #  1 channel
+            align(centroid),        #  1 channel
+            align(bandwidth),       #  1 channel
+        ], axis=0)  # Total: 113 channels
+
+        elapsed = time.time() - t0
+        print(f"  [PERF] Full feature extraction: {elapsed:.2f}s ({features.shape[1]} frames)")
+
+        return features  # shape: (113, T)
+
+    def _slice_windows(self, full_features, sr=16000, window_sec=5.0, stride_sec=2.5):
+        """
+        Slice a full (113, T) feature matrix into overlapping windows of MAX_LEN frames.
+        This avoids re-computing features per window.
+        """
+        # Compute how many spectrogram frames correspond to window_sec / stride_sec
+        hop_length = 512  # librosa default
+        window_frames = int(window_sec * sr / hop_length)
+        stride_frames = int(stride_sec * sr / hop_length)
+        total_frames = full_features.shape[1]
+
+        windows = []
+
+        if total_frames <= MAX_LEN:
+            # Short audio — single window, pad to MAX_LEN
+            windows.append(self._pad_or_trim(full_features))
+        else:
+            for start in range(0, total_frames - window_frames + 1, stride_frames):
+                chunk = full_features[:, start : start + window_frames]
+                windows.append(self._pad_or_trim(chunk))
+                if len(windows) >= MAX_WINDOWS:
+                    break
+
+            # Catch tail if significant and we haven't hit max windows
+            if len(windows) < MAX_WINDOWS and (total_frames % stride_frames) > (sr // hop_length):
+                chunk = full_features[:, -window_frames:]
+                windows.append(self._pad_or_trim(chunk))
+
+        print(f"  [PERF] Sliced {len(windows)} windows from {total_frames} frames")
+        return np.array(windows)
+
+    # ── Prediction ──────────────────────────────────────────────────
 
     def predict_from_file(self, audio_path):
-        """Predict using a sliding window to handle long dialogues."""
+        """Predict using optimized compute-once windowing strategy."""
         try:
-            # Extract all windows (e.g., 30s audio -> ~10-12 overlapping windows)
-            windows = self._extract_windows(audio_path)
+            t_start = time.time()
+
+            # 1. Load audio ONCE, cap at MAX_AUDIO_SEC
+            audio, sr = librosa.load(audio_path, sr=16000, duration=MAX_AUDIO_SEC)
+            print(f"  [PERF] Audio loaded: {len(audio)/sr:.1f}s @ {sr}Hz")
+
+            # 2. Extract all features on the full audio (8 librosa calls total)
+            full_features = self._extract_full_features(audio, sr)
+
+            # Free raw audio — no longer needed
+            del audio
+            gc.collect()
+
+            # 3. Slice feature matrix into windows (zero librosa calls)
+            windows = self._slice_windows(full_features, sr)
+
+            # Free full feature matrix
+            del full_features
+            gc.collect()
+
+            # 4. Batch inference
             windows_tensor = torch.tensor(windows, dtype=torch.float32).to(DEVICE)
-            
+            del windows
+            gc.collect()
+
             with torch.no_grad():
-                # Model handles batch of windows efficiently
                 probs = self.model(windows_tensor).squeeze(-1).cpu().numpy()
-            
-            # If probs is a single value (one window), wrap it in a list
+
+            del windows_tensor
+            gc.collect()
+
+            # Handle single-window case
             if probs.ndim == 0:
                 probs = np.array([probs])
                 
-            # Calibrate all probabilities
+            # 5. Calibrate probabilities
             calibrated_probs = [self._apply_calibration(p) for p in probs]
             
-            # Aggregation Strategy:
-            # 1. If any window is EXTREMELY likely AI (e.g. > 90%), flag as AI.
-            # 2. Otherwise, take the mean.
+            # 6. Aggregate
             max_prob = max(calibrated_probs)
             avg_prob = sum(calibrated_probs) / len(calibrated_probs)
             
@@ -262,6 +264,9 @@ class VoiceDetector:
                 
             is_ai = final_prob > 0.5
             confidence = final_prob if is_ai else (1 - final_prob)
+
+            elapsed = time.time() - t_start
+            print(f"  [PERF] Total inference: {elapsed:.2f}s | {len(calibrated_probs)} windows | result={('AI' if is_ai else 'HUMAN')} ({confidence:.2%})")
             
             return {
                 "classification": "AI_GENERATED" if is_ai else "HUMAN",
@@ -275,7 +280,9 @@ class VoiceDetector:
             }
         except Exception as e:
             print(f"Prediction error: {e}")
-            raise e    
+            gc.collect()
+            raise e
+
     def _is_mp3_bytes(self, audio_bytes: bytes) -> bool:
         if not audio_bytes or len(audio_bytes) < 4:
             return False
@@ -301,6 +308,10 @@ class VoiceDetector:
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
             f.write(audio_bytes)
             temp_path = f.name
+
+        # Free base64 bytes from memory immediately
+        del audio_bytes
+        gc.collect()
 
         try:
             result = self.predict_from_file(temp_path)

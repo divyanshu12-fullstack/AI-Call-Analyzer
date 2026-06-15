@@ -1,6 +1,8 @@
 """
 FastAPI server for AI Voice Detection.
 Exposes a POST /api/voice-detection endpoint that accepts base64-encoded audio.
+
+OPTIMIZED: Added keep-alive self-ping to prevent Render cold starts.
 """
 from fastapi import FastAPI, HTTPException, Header, Security, Depends, Request
 from dotenv import load_dotenv
@@ -12,6 +14,8 @@ from pydantic import BaseModel, ValidationError
 from typing import Optional
 import os
 import sys
+import time
+import threading
 
 # Add current directory to sys.path so 'inference' and 'model' can be imported
 # when running from the project root (as Render does)
@@ -55,6 +59,42 @@ app.add_middleware(
 
 # Initialize detector (loads model once at startup)
 detector = VoiceDetector()
+
+# ── Keep-alive self-ping ────────────────────────────────────────
+# Prevents Render free tier from spinning down after 15 min of inactivity.
+# Uses a lightweight background thread that pings the health endpoint
+# every 12 minutes (~zero memory overhead).
+
+KEEP_ALIVE_INTERVAL = 12 * 60  # 12 minutes in seconds
+
+def _keep_alive_ping():
+    """Background thread: ping own health endpoint to stay warm on Render."""
+    import urllib.request
+    
+    # Determine the public URL from env (Render sets RENDER_EXTERNAL_URL)
+    base_url = os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
+    if not base_url:
+        # Fallback: try the known production URL
+        base_url = "https://ai-call-analyzer.onrender.com"
+    
+    ping_url = f"{base_url}/"
+    
+    while True:
+        try:
+            time.sleep(KEEP_ALIVE_INTERVAL)
+            req = urllib.request.Request(ping_url, method="HEAD")
+            urllib.request.urlopen(req, timeout=10)
+            print(f"[KEEP-ALIVE] Pinged {ping_url} — staying warm")
+        except Exception as e:
+            print(f"[KEEP-ALIVE] Ping failed (non-critical): {e}")
+
+# Start keep-alive thread on app startup
+@app.on_event("startup")
+def start_keep_alive():
+    thread = threading.Thread(target=_keep_alive_ping, daemon=True, name="keep-alive")
+    thread.start()
+    print("[KEEP-ALIVE] Background ping thread started (interval: 12 min)")
+
 
 # Custom error handler for standardized error responses
 @app.exception_handler(HTTPException)
@@ -141,8 +181,12 @@ def detect_voice(request: AudioRequest, api_key: str = Depends(get_api_key)):
     
     Returns classification, confidence score, and technical explanation.
     """
+    t_request = time.time()
+    
     # Log the request for debugging
-    print(f"Received request: language={request.language}, audioFormat={request.audioFormat}, audioBase64 length={len(request.audioBase64) if request.audioBase64 else 0}")
+    b64_len = len(request.audioBase64) if request.audioBase64 else 0
+    print(f"\n{'='*60}")
+    print(f"[REQUEST] language={request.language}, format={request.audioFormat}, base64_len={b64_len}")
     
     # Supported languages per submission spec
     SUPPORTED_LANGUAGES = ["Tamil", "English", "Hindi", "Malayalam", "Telugu"]
@@ -172,6 +216,10 @@ def detect_voice(request: AudioRequest, api_key: str = Depends(get_api_key)):
         # Rename confidence to confidenceScore if needed
         if 'confidence' in result:
             result['confidenceScore'] = result.pop('confidence')
+
+        elapsed = time.time() - t_request
+        print(f"[DONE] Total request time: {elapsed:.2f}s")
+        print(f"{'='*60}\n")
             
         return DetectionResponse(**result)
         
@@ -180,7 +228,8 @@ def detect_voice(request: AudioRequest, api_key: str = Depends(get_api_key)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"Error processing request: {e}")
+        elapsed = time.time() - t_request
+        print(f"[ERROR] After {elapsed:.2f}s: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing audio: {str(e)}")
 
 
